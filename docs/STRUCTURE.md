@@ -49,6 +49,7 @@ voting-tele-bot/
     ├── test_hashing.py
     ├── test_repositories.py
     ├── test_score_voting.py
+    ├── test_handlers.py
     └── test_rendering.py
 ```
 
@@ -61,23 +62,24 @@ implementation status.
 |---|---|
 | `compose.yaml`, `compose.dev.yaml`, `Containerfile` | Implemented; Postgres 18 volume mounts at `/var/lib/postgresql` |
 | `alembic/versions/0001_initial_schema.py` | Implemented |
-| `src/voting_bot/main.py` | Bot startup with DB lifecycle implemented |
+| `src/voting_bot/main.py` | Bot startup with DB lifecycle and handler registration implemented |
 | `src/voting_bot/config.py` | Telegram, DB, hash, score, and log config implemented |
 | `src/voting_bot/database_url.py` | Postgres URL driver normalization implemented |
 | `src/voting_bot/models.py` | Implemented |
 | `src/voting_bot/voting_methods/` | Score voting core implemented |
-| `src/voting_bot/handlers/commands.py` | Placeholder command handlers only |
+| `src/voting_bot/handlers/commands.py` | `/scorepoll`, `/closepoll`, `/start`, and `/help` implemented |
 | `src/voting_bot/db.py` | Async psycopg connection and transaction helper implemented |
 | `src/voting_bot/hashing.py` | HMAC voter ID helper implemented |
 | `src/voting_bot/repositories/` | Poll, option, ballot, and session repository functions implemented |
-| `src/voting_bot/handlers/callbacks.py` | Planned |
-| `src/voting_bot/rendering.py` | Planned |
+| `src/voting_bot/handlers/callbacks.py` | Score voting callback flow implemented |
+| `src/voting_bot/rendering.py` | Poll, score prompt, and ballot summary rendering implemented |
 | `tests/test_config.py` | Implemented |
 | `tests/test_database_url.py` | Implemented |
 | `tests/test_score_voting.py` | Implemented |
 | `tests/test_hashing.py` | Implemented |
 | `tests/test_repositories.py` | Implemented; skips when `DATABASE_URL` is unset or unreachable |
-| `tests/test_rendering.py` | Planned |
+| `tests/test_rendering.py` | Implemented |
+| `tests/test_handlers.py` | Command and callback payload parsing implemented |
 
 ## Key Boundaries
 

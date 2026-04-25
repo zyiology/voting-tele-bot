@@ -1,10 +1,11 @@
 import logging
 
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
 from voting_bot.config import load_config
 from voting_bot.db import Database
-from voting_bot.handlers.commands import scorepoll, start
+from voting_bot.handlers.callbacks import handle_callback
+from voting_bot.handlers.commands import closepoll, help_command, scorepoll, start
 
 
 def main() -> None:
@@ -34,7 +35,10 @@ def main() -> None:
         .build()
     )
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("scorepoll", scorepoll))
+    app.add_handler(CommandHandler("closepoll", closepoll))
+    app.add_handler(CallbackQueryHandler(handle_callback))
 
     app.run_polling()
 
