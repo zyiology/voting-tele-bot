@@ -10,6 +10,7 @@ from voting_bot.models import (
     Poll,
     PollOption,
     PollStatus,
+    ResultsVisibility,
     ScorePollResult,
     VotingMode,
 )
@@ -47,6 +48,16 @@ def render_group_poll(
     if result.complete_ballot_count == 0:
         lines.extend(_option_lines(options))
         lines.extend(["", "Votes cast: 0"])
+    elif _should_hide_results(poll):
+        lines.extend(_option_lines(options))
+        lines.extend(
+            [
+                "",
+                f"Votes cast: {result.complete_ballot_count}",
+                "",
+                "Results hidden until the poll closes.",
+            ]
+        )
     else:
         result_label = (
             f"Final results ({result.complete_ballot_count} votes):"
@@ -61,6 +72,13 @@ def render_group_poll(
         keyboard = _group_keyboard(poll, options)
 
     return "\n".join(lines), keyboard
+
+
+def _should_hide_results(poll: Poll) -> bool:
+    return (
+        poll.status == PollStatus.OPEN
+        and poll.results_visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED
+    )
 
 
 def render_score_prompt(

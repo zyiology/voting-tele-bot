@@ -26,6 +26,7 @@ from voting_bot.models import (
     Poll,
     PollOption,
     PollStatus,
+    ResultsVisibility,
     VotingMethodOptions,
     VotingMode,
 )
@@ -47,6 +48,7 @@ def test_parse_scorepoll_command_accepts_max_before_values() -> None:
     assert request.options == ("Sushi", "Pizza")
     assert request.score_max == 10
     assert request.voting_mode == VotingMode.DM
+    assert request.results_visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED
 
 
 def test_parse_scorepoll_command_accepts_max_after_values() -> None:
@@ -58,6 +60,7 @@ def test_parse_scorepoll_command_accepts_max_after_values() -> None:
     assert request.options == ("Sushi", "Pizza")
     assert request.score_max == 7
     assert request.voting_mode == VotingMode.DM
+    assert request.results_visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED
 
 
 def test_parse_scorepoll_command_accepts_quick_mode() -> None:
@@ -69,6 +72,19 @@ def test_parse_scorepoll_command_accepts_quick_mode() -> None:
     assert request.options == ("Sushi", "Pizza")
     assert request.score_max == 5
     assert request.voting_mode == VotingMode.QUICK
+    assert request.results_visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED
+
+
+def test_parse_scorepoll_command_accepts_live_results() -> None:
+    request = parse_scorepoll_command(
+        '/scorepoll --live-results "Best food?" "Sushi" "Pizza"'
+    )
+
+    assert request.title == "Best food?"
+    assert request.options == ("Sushi", "Pizza")
+    assert request.score_max is None
+    assert request.voting_mode == VotingMode.DM
+    assert request.results_visibility == ResultsVisibility.LIVE
 
 
 @pytest.mark.parametrize(
@@ -78,6 +94,7 @@ def test_parse_scorepoll_command_accepts_quick_mode() -> None:
         '/scorepoll "Question?" "Only one option"',
         '/scorepoll --max "Question?" "Sushi" "Pizza"',
         '/scorepoll --quick --quick "Question?" "Sushi" "Pizza"',
+        '/scorepoll --live-results --live-results "Question?" "Sushi" "Pizza"',
         '/scorepoll --quick "Question?" "A" "B" "C" "D" "E" "F"',
         '/scorepoll --unknown "Question?" "Sushi" "Pizza"',
         '/scorepoll "Question?" "Sushi',
@@ -247,6 +264,7 @@ def _make_poll(*, voting_mode: VotingMode) -> Poll:
         title="Where should we eat?",
         voting_method=VotingMethodOptions.SCORE,
         voting_mode=voting_mode,
+        results_visibility=ResultsVisibility.HIDDEN_UNTIL_CLOSED,
         status=PollStatus.OPEN,
         score_min=0,
         score_max=5,

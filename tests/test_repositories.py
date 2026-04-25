@@ -11,7 +11,12 @@ from alembic.config import Config as AlembicConfig
 from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
 from voting_bot.db import Database
-from voting_bot.models import PollStatus, VotingMethodOptions, VotingMode
+from voting_bot.models import (
+    PollStatus,
+    ResultsVisibility,
+    VotingMethodOptions,
+    VotingMode,
+)
 from voting_bot.repositories import ballots, polls
 
 
@@ -51,6 +56,7 @@ def test_create_and_retrieve_score_poll(database_url: str) -> None:
                 assert poll.title == "Lunch"
                 assert poll.voting_method == VotingMethodOptions.SCORE
                 assert poll.voting_mode == VotingMode.DM
+                assert poll.results_visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED
                 assert poll.status == PollStatus.OPEN
                 assert poll.score_min == 0
                 assert poll.score_max == 5
@@ -86,6 +92,28 @@ def test_create_score_poll_can_store_quick_voting_mode(database_url: str) -> Non
             )
             try:
                 assert poll.voting_mode == VotingMode.QUICK
+                assert await polls.get_poll(db, poll.id) == poll
+            finally:
+                await _delete_poll(db, poll.id)
+
+    asyncio.run(run())
+
+
+def test_create_score_poll_can_store_live_results_visibility(database_url: str) -> None:
+    async def run() -> None:
+        async with _connected_db(database_url) as db:
+            poll, _ = await polls.create_score_poll(
+                db,
+                chat_id=_unique_chat_id(),
+                created_by_hash="creator",
+                title="Lunch",
+                option_labels=["Sushi", "Pizza"],
+                score_min=0,
+                score_max=5,
+                results_visibility=ResultsVisibility.LIVE,
+            )
+            try:
+                assert poll.results_visibility == ResultsVisibility.LIVE
                 assert await polls.get_poll(db, poll.id) == poll
             finally:
                 await _delete_poll(db, poll.id)

@@ -20,6 +20,11 @@ class VotingMode(StrEnum):
     QUICK = "quick"
 
 
+class ResultsVisibility(StrEnum):
+    HIDDEN_UNTIL_CLOSED = "hidden_until_closed"
+    LIVE = "live"
+
+
 @dataclass(frozen=True)
 class Poll:
     id: UUID
@@ -29,6 +34,7 @@ class Poll:
     title: str
     voting_method: VotingMethodOptions
     voting_mode: VotingMode
+    results_visibility: ResultsVisibility
     status: PollStatus
     score_min: int
     score_max: int

@@ -2,7 +2,9 @@
 
 ## Privacy Model
 
-Individual ballots are hidden from other group members. Voting happens through private inline button interactions. The bot never posts "Alice voted 4 for Sushi." The group message shows only aggregate results and a voter count.
+Individual ballots are hidden from other group members. Voting happens through private inline button interactions. The bot never posts "Alice voted 4 for Sushi." By default, the group message shows only a completed ballot count while the poll is open, then shows aggregate results after closing.
+
+Poll creators can opt into live aggregate results with `/scorepoll --live-results`. This is less private for small groups or early voting because the first completed ballot is visible as an aggregate, even though the voter identity is not shown.
 
 This is **not** cryptographic anonymity. The bot server receives Telegram user data on each interaction, and Telegram itself sees the interaction. The guarantee is: *other group members cannot see how an individual voted.*
 

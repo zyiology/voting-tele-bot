@@ -15,6 +15,8 @@ CREATE TABLE polls (
     title           TEXT NOT NULL,
     voting_method   TEXT NOT NULL CHECK (voting_method IN ('score')),
     voting_mode     TEXT NOT NULL CHECK (voting_mode IN ('dm', 'quick')),
+    results_visibility TEXT NOT NULL DEFAULT 'hidden_until_closed'
+        CHECK (results_visibility IN ('hidden_until_closed', 'live')),
     status          TEXT NOT NULL CHECK (status IN ('open', 'closed')),
     score_min       INTEGER NOT NULL DEFAULT 0,
     score_max       INTEGER NOT NULL DEFAULT 5,
@@ -68,6 +70,7 @@ CREATE TABLE poll_sessions (
 - `poll_sessions` tracks which option a voter is currently scoring during the inline flow; cleared when voting completes.
 - `message_id` on `polls` is set after the bot posts the group message; used to edit the message when results update.
 - `voting_mode` controls whether the poll uses the private DM flow (`dm`) or group inline score buttons (`quick`).
+- `results_visibility` controls whether open polls hide aggregate rankings until close or show live results.
 - All ballot history is retained after a poll closes.
 - One active poll per `chat_id` is enforced by the partial unique index `polls_one_open_per_chat`.
 - Score bounds (`score_min <= score_max`) are enforced at the poll level; per-ballot range validation lives in the application layer (`voting_methods/score.py`).

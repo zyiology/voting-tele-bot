@@ -8,6 +8,7 @@ from voting_bot.models import (
     Poll,
     PollOption,
     PollStatus,
+    ResultsVisibility,
     VotingMethodOptions,
     VotingMode,
 )
@@ -28,6 +29,7 @@ def make_poll(
     poll_id: UUID | None = None,
     status: PollStatus = PollStatus.OPEN,
     voting_mode: VotingMode = VotingMode.DM,
+    results_visibility: ResultsVisibility = ResultsVisibility.HIDDEN_UNTIL_CLOSED,
 ) -> Poll:
     return Poll(
         id=poll_id or uuid4(),
@@ -37,6 +39,7 @@ def make_poll(
         title="Where should we eat?",
         voting_method=VotingMethodOptions.SCORE,
         voting_mode=voting_mode,
+        results_visibility=results_visibility,
         status=status,
         score_min=0,
         score_max=5,
@@ -105,8 +108,26 @@ def test_render_group_poll_quick_mode_shows_score_buttons() -> None:
     )
 
 
-def test_render_group_poll_shows_ranked_results() -> None:
+def test_render_group_poll_hides_open_results_by_default() -> None:
     poll = make_poll()
+    options = make_options(poll.id)
+    scores = [
+        make_score(poll.id, "a", options[0].id, 2),
+        make_score(poll.id, "a", options[1].id, 5),
+    ]
+
+    text, keyboard = render_group_poll(poll, options, scores)
+
+    assert "Votes cast: 1" in text
+    assert "Results hidden until the poll closes." in text
+    assert "Current results:" not in text
+    assert "1. Pizza - avg 5.0" not in text
+    assert "2. Sushi - avg 2.0" not in text
+    assert keyboard is not None
+
+
+def test_render_group_poll_shows_live_ranked_results_when_enabled() -> None:
+    poll = make_poll(results_visibility=ResultsVisibility.LIVE)
     options = make_options(poll.id)
     scores = [
         make_score(poll.id, "a", options[0].id, 2),

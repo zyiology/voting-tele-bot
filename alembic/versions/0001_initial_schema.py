@@ -27,6 +27,8 @@ def upgrade() -> None:
             title           TEXT NOT NULL,
             voting_method   TEXT NOT NULL CHECK (voting_method IN ('score')),
             voting_mode     TEXT NOT NULL CHECK (voting_mode IN ('dm', 'quick')),
+            results_visibility TEXT NOT NULL DEFAULT 'hidden_until_closed'
+                CHECK (results_visibility IN ('hidden_until_closed', 'live')),
             status          TEXT NOT NULL CHECK (status IN ('open', 'closed')),
             score_min       INTEGER NOT NULL DEFAULT 0,
             score_max       INTEGER NOT NULL DEFAULT 5,

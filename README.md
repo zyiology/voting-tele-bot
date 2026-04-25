@@ -10,7 +10,7 @@ A Telegram bot for running score voting polls in group chats. Telegram's native 
 - Optional quick voting mode via score buttons directly in the group message
 - Ballots are private — no individual votes posted to the group
 - Voter identities stored as HMAC-hashed IDs, never raw
-- Live aggregate results visible in the group message as votes come in
+- Live aggregate results are hidden by default while voting is open, with opt-in live display via `--live-results`
 - Ballot editing while the poll is open
 - Close a poll with `/closepoll` (creator or group admin only)
 - One active poll per group chat at a time

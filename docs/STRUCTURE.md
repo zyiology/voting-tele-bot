@@ -10,6 +10,8 @@ voting-tele-bot/
 ├── compose.yaml                # Bot + DB services
 ├── compose.dev.yaml            # Dev overrides (exposes Postgres on localhost:5432)
 ├── alembic.ini
+├── scripts/
+│   └── inspect_poll_voters.py   # Inspect poll voter hashes and optionally match known Telegram IDs
 ├── alembic/
 │   ├── env.py
 │   ├── script.py.mako
@@ -31,7 +33,7 @@ voting-tele-bot/
 │       ├── database_url.py     # Normalizes Postgres URLs for SQLAlchemy and psycopg
 │       ├── db.py               # Connection pool; migration runner
 │       ├── hashing.py          # HMAC voter ID helper
-│       ├── models.py           # Dataclasses / typed dicts for Poll, Option, Ballot
+│       ├── models.py           # Dataclasses / typed dicts for Poll, Option, Ballot, visibility settings
 │       ├── repositories/
 │       │   ├── polls.py        # Poll and option CRUD
 │       │   └── ballots.py      # Ballot upsert; session management
@@ -52,34 +54,6 @@ voting-tele-bot/
     ├── test_handlers.py
     └── test_rendering.py
 ```
-
-## Implementation Status
-
-This document is the source of truth for repository structure and coarse
-implementation status.
-
-| Path | Status |
-|---|---|
-| `compose.yaml`, `compose.dev.yaml`, `Containerfile` | Implemented; Postgres 18 volume mounts at `/var/lib/postgresql` |
-| `alembic/versions/0001_initial_schema.py` | Implemented; includes poll voting mode |
-| `src/voting_bot/main.py` | Bot startup with DB lifecycle and handler registration implemented |
-| `src/voting_bot/config.py` | Telegram, DB, hash, score, and log config implemented |
-| `src/voting_bot/database_url.py` | Postgres URL driver normalization implemented |
-| `src/voting_bot/models.py` | Implemented |
-| `src/voting_bot/voting_methods/` | Score voting core implemented |
-| `src/voting_bot/handlers/commands.py` | `/scorepoll`, `/scorepoll --quick`, `/closepoll`, `/start`, and `/help` implemented |
-| `src/voting_bot/db.py` | Async psycopg connection and transaction helper implemented |
-| `src/voting_bot/hashing.py` | HMAC voter ID helper implemented |
-| `src/voting_bot/repositories/` | Poll, option, ballot, and session repository functions implemented |
-| `src/voting_bot/handlers/callbacks.py` | DM and quick group score voting callback flows implemented |
-| `src/voting_bot/rendering.py` | Poll, quick score keyboard, score prompt, and ballot summary rendering implemented |
-| `tests/test_config.py` | Implemented |
-| `tests/test_database_url.py` | Implemented |
-| `tests/test_score_voting.py` | Implemented |
-| `tests/test_hashing.py` | Implemented |
-| `tests/test_repositories.py` | Implemented; skips when `DATABASE_URL` is unset or unreachable |
-| `tests/test_rendering.py` | Implemented |
-| `tests/test_handlers.py` | Command and callback payload parsing implemented, including quick mode |
 
 ## Key Boundaries
 

@@ -11,7 +11,7 @@ from voting_bot.config import Config
 from voting_bot.db import Database
 from voting_bot.handlers.callbacks import refresh_group_poll
 from voting_bot.hashing import hash_voter_id
-from voting_bot.models import VotingMode
+from voting_bot.models import ResultsVisibility, VotingMode
 from voting_bot.rendering import render_group_poll
 from voting_bot.repositories import polls
 
@@ -24,7 +24,8 @@ MAX_OPTION_LENGTH = 80
 MIN_OPTIONS = 2
 
 SCOREPOLL_USAGE = (
-    'Usage: /scorepoll [--max N] "Question?" "Option A" "Option B"'
+    'Usage: /scorepoll [--max N] [--quick] [--live-results] '
+    '"Question?" "Option A" "Option B"'
 )
 
 
@@ -34,6 +35,7 @@ class ScorePollRequest:
     options: tuple[str, ...]
     score_max: int | None
     voting_mode: VotingMode
+    results_visibility: ResultsVisibility
 
 
 class ScorePollParseError(ValueError):
@@ -115,6 +117,7 @@ async def scorepoll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             score_min=config.score_min,
             score_max=score_max,
             voting_mode=request.voting_mode,
+            results_visibility=request.results_visibility,
         )
     except UniqueViolation:
         await reply(update, "This chat already has an open poll. Close it first.")
@@ -173,6 +176,7 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
 
     score_max: int | None = None
     voting_mode = VotingMode.DM
+    results_visibility = ResultsVisibility.HIDDEN_UNTIL_CLOSED
     values: list[str] = []
     index = 0
     while index < len(parts):
@@ -181,6 +185,10 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
             if voting_mode == VotingMode.QUICK:
                 raise ScorePollParseError("--quick can only be provided once.")
             voting_mode = VotingMode.QUICK
+        elif part == "--live-results":
+            if results_visibility == ResultsVisibility.LIVE:
+                raise ScorePollParseError("--live-results can only be provided once.")
+            results_visibility = ResultsVisibility.LIVE
         elif part == "--max":
             if score_max is not None:
                 raise ScorePollParseError("--max can only be provided once.")
@@ -235,6 +243,7 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
         options=option_labels,
         score_max=score_max,
         voting_mode=voting_mode,
+        results_visibility=results_visibility,
     )
 
 

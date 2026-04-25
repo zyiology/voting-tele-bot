@@ -5,7 +5,14 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from voting_bot.db import Database, Row
-from voting_bot.models import Poll, PollOption, PollStatus, VotingMethodOptions, VotingMode
+from voting_bot.models import (
+    Poll,
+    PollOption,
+    PollStatus,
+    ResultsVisibility,
+    VotingMethodOptions,
+    VotingMode,
+)
 
 
 async def create_score_poll(
@@ -18,6 +25,7 @@ async def create_score_poll(
     score_min: int,
     score_max: int,
     voting_mode: VotingMode = VotingMode.DM,
+    results_visibility: ResultsVisibility = ResultsVisibility.HIDDEN_UNTIL_CLOSED,
 ) -> tuple[Poll, list[PollOption]]:
     if score_min > score_max:
         raise ValueError("score_min must be less than or equal to score_max")
@@ -37,9 +45,9 @@ async def create_score_poll(
                 """
                 INSERT INTO polls (
                     id, chat_id, created_by_hash, title, voting_method, voting_mode,
-                    status, score_min, score_max
+                    results_visibility, status, score_min, score_max
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -49,6 +57,7 @@ async def create_score_poll(
                     title,
                     VotingMethodOptions.SCORE.value,
                     voting_mode.value,
+                    results_visibility.value,
                     PollStatus.OPEN.value,
                     score_min,
                     score_max,
@@ -169,6 +178,7 @@ def _poll_from_row(row: Row) -> Poll:
         title=row["title"],
         voting_method=VotingMethodOptions(row["voting_method"]),
         voting_mode=VotingMode(row["voting_mode"]),
+        results_visibility=ResultsVisibility(row["results_visibility"]),
         status=PollStatus(row["status"]),
         score_min=row["score_min"],
         score_max=row["score_max"],
