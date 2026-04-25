@@ -1,2 +1,3 @@
 -podman compose setup for bot container
 -minimal bot created (only replies fixed messages)
+-postgres 18 db service added to compose; alembic migrations wired into bot startup; initial schema migration (polls, poll_options, ballots, poll_sessions)

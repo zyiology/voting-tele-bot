@@ -2,6 +2,8 @@
 
 PostgreSQL. All tables use `ON DELETE CASCADE` so removing a poll cleans up its options, ballots, and sessions.
 
+Schema is managed by Alembic (`alembic/versions/`). The DDL below documents the current state — the migration files in `alembic/versions/` are the source of truth. The bot container runs `alembic upgrade head` on startup before launching.
+
 ## Schema
 
 ```sql

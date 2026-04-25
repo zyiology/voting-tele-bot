@@ -8,6 +8,13 @@ voting-tele-bot/
 ├── pyproject.toml
 ├── Containerfile               # Bot image
 ├── compose.yaml                # Bot + DB services
+├── compose.dev.yaml            # Dev overrides (exposes Postgres on localhost:5432)
+├── alembic.ini
+├── alembic/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       └── 0001_initial_schema.py
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── SECURITY.md

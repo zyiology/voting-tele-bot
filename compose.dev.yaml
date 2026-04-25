@@ -1,0 +1,6 @@
+# Development overrides. Use with:
+#   podman compose -f compose.yaml -f compose.dev.yaml up
+services:
+  db:
+    ports:
+      - "5432:5432"

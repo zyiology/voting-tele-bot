@@ -7,7 +7,10 @@ All configuration is loaded from environment variables. Use `.env` locally (neve
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | yes | — | Bot token from @BotFather |
-| `DATABASE_URL` | yes | — | PostgreSQL DSN, e.g. `postgresql://user:pass@db:5432/voting_bot` |
+| `POSTGRES_USER` | yes | — | Postgres role; used by the `db` container |
+| `POSTGRES_PASSWORD` | yes | — | Postgres password; used by the `db` container |
+| `POSTGRES_DB` | yes | — | Postgres database name; used by the `db` container |
+| `DATABASE_URL` | yes | — | PostgreSQL DSN, e.g. `postgresql://user:pass@db:5432/voting_bot`. Must stay consistent with the three `POSTGRES_*` values |
 | `VOTER_HASH_SECRET` | yes | — | HMAC secret for hashing voter IDs; must be long and random |
 | `SCORE_MIN` | no | `0` | Default minimum score for new polls |
 | `SCORE_MAX` | no | `5` | Default maximum score for new polls |
