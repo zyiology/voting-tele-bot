@@ -22,5 +22,7 @@ packages = ["src/voting_bot"]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0",
+    "ruff>=0.14",
     "ty>=0.0.32",
 ]

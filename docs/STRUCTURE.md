@@ -48,6 +48,29 @@ voting-tele-bot/
     └── test_rendering.py
 ```
 
+## Implementation Status
+
+This document is the source of truth for repository structure and coarse
+implementation status.
+
+| Path | Status |
+|---|---|
+| `compose.yaml`, `compose.dev.yaml`, `Containerfile` | Implemented |
+| `alembic/versions/0001_initial_schema.py` | Implemented |
+| `src/voting_bot/main.py` | Minimal bot startup implemented |
+| `src/voting_bot/config.py` | Minimal Telegram/log config implemented |
+| `src/voting_bot/models.py` | Implemented |
+| `src/voting_bot/voting_methods/` | Score voting core implemented |
+| `src/voting_bot/handlers/commands.py` | Placeholder command handlers only |
+| `src/voting_bot/db.py` | Planned |
+| `src/voting_bot/hashing.py` | Planned |
+| `src/voting_bot/repositories/` | Planned |
+| `src/voting_bot/handlers/callbacks.py` | Planned |
+| `src/voting_bot/rendering.py` | Planned |
+| `tests/test_score_voting.py` | Implemented |
+| `tests/test_hashing.py` | Planned |
+| `tests/test_rendering.py` | Planned |
+
 ## Key Boundaries
 
 - `voting_methods/` has no Telegram dependencies — pure Python, fully unit-testable.
