@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from telegram import InlineKeyboardMarkup, Update
+from telegram import CallbackQuery, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, Forbidden
 from telegram.ext import ContextTypes
 
 from voting_bot.config import Config
 from voting_bot.db import Database
 from voting_bot.hashing import hash_voter_id
-from voting_bot.models import BallotScore, Poll, PollOption, PollStatus
+from voting_bot.models import BallotScore, Poll, PollOption, PollStatus, VotingMode
 from voting_bot.rendering import (
     render_ballot_summary,
     render_group_poll,
@@ -78,6 +78,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
+    if action.kind == "q":
+        if action.option_order is None or action.score is None:
+            await query.answer("This button is no longer valid.", show_alert=True)
+            return
+        await _record_quick_score(
+            context,
+            action.poll_id,
+            voter_hash,
+            action.option_order,
+            action.score,
+            query,
+        )
+        return
+
     if action.kind == "e":
         try:
             await _restart_vote(context, action.poll_id, voter_hash, user.id)
@@ -103,7 +117,7 @@ def parse_callback_data(data: str) -> CallbackAction:
         raise CallbackDataError("missing callback fields")
 
     kind = parts[0]
-    if kind not in {"v", "s", "e", "d"}:
+    if kind not in {"v", "s", "q", "e", "d"}:
         raise CallbackDataError("unknown callback kind")
 
     try:
@@ -111,7 +125,7 @@ def parse_callback_data(data: str) -> CallbackAction:
     except ValueError as exc:
         raise CallbackDataError("invalid poll id") from exc
 
-    if kind == "s":
+    if kind in {"s", "q"}:
         if len(parts) != 4:
             raise CallbackDataError("score callback requires four fields")
         try:
@@ -250,6 +264,60 @@ async def _record_score(
             user_id,
         )
 
+    await refresh_group_poll(context, poll, options)
+
+
+async def _record_quick_score(
+    context: ContextTypes.DEFAULT_TYPE,
+    poll_id: UUID,
+    voter_hash: str,
+    option_order: int,
+    score: int,
+    query: CallbackQuery,
+) -> None:
+    poll_with_options = await polls.get_poll_with_options(_db(context), poll_id)
+    if poll_with_options is None:
+        await query.answer("This poll no longer exists.", show_alert=True)
+        return
+
+    poll, options = poll_with_options
+    if poll.status != PollStatus.OPEN:
+        await query.answer("This poll is closed.", show_alert=True)
+        return
+    if poll.voting_mode != VotingMode.QUICK:
+        await query.answer("This button is no longer valid.", show_alert=True)
+        return
+
+    option = _option_by_order(options, option_order)
+    if option is None:
+        await query.answer("This button is no longer valid.", show_alert=True)
+        return
+
+    try:
+        validate_score(score, poll.score_min, poll.score_max)
+    except ScoreValidationError:
+        await query.answer("That score is outside this poll's range.", show_alert=True)
+        return
+
+    await ballots.upsert_score(
+        _db(context),
+        poll_id=poll.id,
+        voter_hash=voter_hash,
+        option_id=option.id,
+        score=score,
+    )
+    voter_scores = await ballots.get_voter_scores(
+        _db(context),
+        poll_id=poll.id,
+        voter_hash=voter_hash,
+    )
+    scored_count = len({voter_score.option_id for voter_score in voter_scores})
+    if scored_count == len(options):
+        message = f"Ballot complete. Saved {option.label}: {score}."
+    else:
+        message = f"Saved {option.label}: {score}. {scored_count}/{len(options)} scored."
+
+    await query.answer(message)
     await refresh_group_poll(context, poll, options)
 
 

@@ -14,6 +14,14 @@ Optional score range flag (defaults to 0–5):
 /scorepoll --max 10 "Best framework?" "Django" "FastAPI" "Flask"
 ```
 
+Quick group voting mode:
+
+```
+/scorepoll --quick "Where should we eat?" "Sushi" "Pizza" "Thai"
+```
+
+Quick mode supports up to 5 options and scores up to 5. Use the default DM flow for larger polls or wider score ranges.
+
 The bot posts a poll message in the group.
 
 ## Group Poll Message
@@ -55,6 +63,29 @@ Sushi: 4 | Pizza: 2 | Thai: 5
 Tapping `[Edit ballot]` restarts the scoring flow with current scores pre-displayed (as text, not pre-selected buttons). Tapping `[Done]` ends the session.
 
 If the user has already voted, `[Vote]` opens the same flow with prior scores shown.
+
+## Voting Flow (quick group mode)
+
+When a poll is created with `--quick`, the group message shows score buttons for every option:
+
+```
+Where should we eat?
+
+Options:
+1. Sushi
+2. Pizza
+3. Thai
+
+Votes cast: 0
+
+[1. Sushi: 0] [1] [2] [3] [4] [5]
+[2. Pizza: 0] [1] [2] [3] [4] [5]
+[3. Thai: 0]  [1] [2] [3] [4] [5]
+```
+
+Each tap records or updates that user's score for the option. Telegram callback notifications give private progress feedback, for example `Saved Pizza: 4. 2/3 scored.` Once every option has a score, the ballot is complete and included in aggregate results.
+
+Quick mode does not mark selected buttons in the shared group message, because any keyboard edit would be visible to the entire group. Use DM mode when users need a private per-option review flow.
 
 ## Results Display
 

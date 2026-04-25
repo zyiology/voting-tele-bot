@@ -15,6 +15,11 @@ class VotingMethodOptions(StrEnum):
     SCORE = "score"
 
 
+class VotingMode(StrEnum):
+    DM = "dm"
+    QUICK = "quick"
+
+
 @dataclass(frozen=True)
 class Poll:
     id: UUID
@@ -23,6 +28,7 @@ class Poll:
     created_by_hash: str
     title: str
     voting_method: VotingMethodOptions
+    voting_mode: VotingMode
     status: PollStatus
     score_min: int
     score_max: int

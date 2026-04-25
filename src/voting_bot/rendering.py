@@ -5,7 +5,14 @@ from uuid import UUID
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from voting_bot.models import BallotScore, Poll, PollOption, PollStatus, ScorePollResult
+from voting_bot.models import (
+    BallotScore,
+    Poll,
+    PollOption,
+    PollStatus,
+    ScorePollResult,
+    VotingMode,
+)
 from voting_bot.voting_methods.score import tally_score_poll
 
 
@@ -15,6 +22,10 @@ def vote_callback_data(poll_id: UUID) -> str:
 
 def score_callback_data(poll_id: UUID, option_order: int, score: int) -> str:
     return f"s:{poll_id}:{option_order}:{score}"
+
+
+def quick_score_callback_data(poll_id: UUID, option_order: int, score: int) -> str:
+    return f"q:{poll_id}:{option_order}:{score}"
 
 
 def edit_callback_data(poll_id: UUID) -> str:
@@ -47,9 +58,7 @@ def render_group_poll(
 
     keyboard = None
     if poll.status == PollStatus.OPEN:
-        keyboard = InlineKeyboardMarkup.from_button(
-            InlineKeyboardButton("Vote", callback_data=vote_callback_data(poll.id))
-        )
+        keyboard = _group_keyboard(poll, options)
 
     return "\n".join(lines), keyboard
 
@@ -124,6 +133,37 @@ def _result_lines(result: ScorePollResult) -> list[str]:
             f"avg {option_result.average_score:.1f}"
         )
     return lines
+
+
+def _group_keyboard(
+    poll: Poll,
+    options: Sequence[PollOption],
+) -> InlineKeyboardMarkup:
+    if poll.voting_mode == VotingMode.DM:
+        return InlineKeyboardMarkup.from_button(
+            InlineKeyboardButton("Vote", callback_data=vote_callback_data(poll.id))
+        )
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for option in options:
+        buttons = [
+            InlineKeyboardButton(
+                (
+                    f"{option.display_order + 1}. {option.label}: {score}"
+                    if score == poll.score_min
+                    else str(score)
+                ),
+                callback_data=quick_score_callback_data(
+                    poll.id,
+                    option.display_order,
+                    score,
+                ),
+            )
+            for score in range(poll.score_min, poll.score_max + 1)
+        ]
+        rows.extend(_chunk_buttons(buttons, size=6))
+
+    return InlineKeyboardMarkup(rows)
 
 
 def _chunk_buttons(

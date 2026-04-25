@@ -11,11 +11,14 @@ from voting_bot.config import Config
 from voting_bot.db import Database
 from voting_bot.handlers.callbacks import refresh_group_poll
 from voting_bot.hashing import hash_voter_id
+from voting_bot.models import VotingMode
 from voting_bot.rendering import render_group_poll
 from voting_bot.repositories import polls
 
 
 MAX_OPTIONS = 10
+MAX_QUICK_OPTIONS = 5
+MAX_QUICK_SCORE = 5
 MAX_TITLE_LENGTH = 140
 MAX_OPTION_LENGTH = 80
 MIN_OPTIONS = 2
@@ -30,6 +33,7 @@ class ScorePollRequest:
     title: str
     options: tuple[str, ...]
     score_max: int | None
+    voting_mode: VotingMode
 
 
 class ScorePollParseError(ValueError):
@@ -86,6 +90,19 @@ async def scorepoll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if score_max < config.score_min:
         await reply(update, f"--max must be at least {config.score_min}.")
         return
+    if request.voting_mode == VotingMode.QUICK and score_max > MAX_QUICK_SCORE:
+        await reply(update, f"--quick supports --max {MAX_QUICK_SCORE} or lower.")
+        return
+    if (
+        request.voting_mode == VotingMode.QUICK
+        and len(request.options) > MAX_QUICK_OPTIONS
+    ):
+        await reply(
+            update,
+            f"--quick supports no more than {MAX_QUICK_OPTIONS} options. "
+            "Use the default DM mode for larger polls.",
+        )
+        return
 
     creator_hash = hash_voter_id(user.id, config.voter_hash_secret)
     try:
@@ -97,6 +114,7 @@ async def scorepoll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             option_labels=request.options,
             score_min=config.score_min,
             score_max=score_max,
+            voting_mode=request.voting_mode,
         )
     except UniqueViolation:
         await reply(update, "This chat already has an open poll. Close it first.")
@@ -154,11 +172,16 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
         raise ScorePollParseError("Malformed command.") from exc
 
     score_max: int | None = None
+    voting_mode = VotingMode.DM
     values: list[str] = []
     index = 0
     while index < len(parts):
         part = parts[index]
-        if part == "--max":
+        if part == "--quick":
+            if voting_mode == VotingMode.QUICK:
+                raise ScorePollParseError("--quick can only be provided once.")
+            voting_mode = VotingMode.QUICK
+        elif part == "--max":
             if score_max is not None:
                 raise ScorePollParseError("--max can only be provided once.")
             index += 1
@@ -193,6 +216,11 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
         raise ScorePollParseError(f"Poll title must be {MAX_TITLE_LENGTH} characters or less.")
     if len(option_labels) > MAX_OPTIONS:
         raise ScorePollParseError(f"Provide no more than {MAX_OPTIONS} options.")
+    if voting_mode == VotingMode.QUICK and len(option_labels) > MAX_QUICK_OPTIONS:
+        raise ScorePollParseError(
+            f"--quick supports no more than {MAX_QUICK_OPTIONS} options. "
+            "Use the default DM mode for larger polls."
+        )
     if any(not option for option in option_labels):
         raise ScorePollParseError("Poll options cannot be blank.")
     if any(len(option) > MAX_OPTION_LENGTH for option in option_labels):
@@ -202,7 +230,12 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
     if score_max is not None and score_max < 0:
         raise ScorePollParseError("--max must be zero or greater.")
 
-    return ScorePollRequest(title=title, options=option_labels, score_max=score_max)
+    return ScorePollRequest(
+        title=title,
+        options=option_labels,
+        score_max=score_max,
+        voting_mode=voting_mode,
+    )
 
 
 def _strip_command(text: str) -> str:

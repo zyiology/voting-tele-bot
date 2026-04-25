@@ -33,11 +33,12 @@ PostgreSQL container
 ## Request Flow
 
 1. User runs `/scorepoll` in a group.
-2. Bot creates a poll record and posts a group message with a `[Vote]` button.
-3. User taps `[Vote]`; bot opens a private DM and walks them through scoring each option.
-4. On each score selection, bot records/updates the ballot and refreshes the group message aggregate.
-5. User taps `[Done]`; session is cleared.
-6. Poll creator or admin runs `/closepoll`; poll status flips to `closed`, further votes are rejected.
+2. Bot creates a poll record and posts a group message.
+3. In default DM mode, the group message has a `[Vote]` button. User taps it; bot opens a private DM and walks them through scoring each option.
+4. In quick mode (`/scorepoll --quick`), the group message has score buttons for each option. Each tap records that user's score and answers the callback with private progress feedback.
+5. On each score selection, bot records/updates the ballot and refreshes the group message aggregate.
+6. User taps `[Done]` in DM mode; session is cleared.
+7. Poll creator or admin runs `/closepoll`; poll status flips to `closed`, further votes are rejected.
 
 ## Deployment
 

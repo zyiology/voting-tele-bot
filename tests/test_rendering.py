@@ -3,10 +3,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from voting_bot.models import BallotScore, Poll, PollOption, PollStatus, VotingMethodOptions
+from voting_bot.models import (
+    BallotScore,
+    Poll,
+    PollOption,
+    PollStatus,
+    VotingMethodOptions,
+    VotingMode,
+)
 from voting_bot.rendering import (
     done_callback_data,
     edit_callback_data,
+    quick_score_callback_data,
     render_ballot_summary,
     render_group_poll,
     render_score_prompt,
@@ -19,6 +27,7 @@ def make_poll(
     *,
     poll_id: UUID | None = None,
     status: PollStatus = PollStatus.OPEN,
+    voting_mode: VotingMode = VotingMode.DM,
 ) -> Poll:
     return Poll(
         id=poll_id or uuid4(),
@@ -27,6 +36,7 @@ def make_poll(
         created_by_hash="creator",
         title="Where should we eat?",
         voting_method=VotingMethodOptions.SCORE,
+        voting_mode=voting_mode,
         status=status,
         score_min=0,
         score_max=5,
@@ -70,6 +80,29 @@ def test_render_group_poll_open_zero_votes_shows_options_and_vote_button() -> No
     button = keyboard.inline_keyboard[0][0]
     assert button.text == "Vote"
     assert button.callback_data == vote_callback_data(poll.id)
+
+
+def test_render_group_poll_quick_mode_shows_score_buttons() -> None:
+    poll = make_poll(voting_mode=VotingMode.QUICK)
+    options = make_options(poll.id)
+
+    text, keyboard = render_group_poll(poll, options, [])
+
+    assert "Where should we eat?" in text
+    assert "Votes cast: 0" in text
+    assert keyboard is not None
+    assert keyboard.inline_keyboard[0][0].text == "1. Sushi: 0"
+    assert keyboard.inline_keyboard[0][0].callback_data == quick_score_callback_data(
+        poll.id,
+        0,
+        0,
+    )
+    assert keyboard.inline_keyboard[1][0].text == "2. Pizza: 0"
+    assert keyboard.inline_keyboard[1][5].callback_data == quick_score_callback_data(
+        poll.id,
+        1,
+        5,
+    )
 
 
 def test_render_group_poll_shows_ranked_results() -> None:

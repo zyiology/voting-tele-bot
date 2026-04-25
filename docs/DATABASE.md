@@ -14,6 +14,7 @@ CREATE TABLE polls (
     created_by_hash TEXT NOT NULL,        -- HMAC of creator's Telegram user ID
     title           TEXT NOT NULL,
     voting_method   TEXT NOT NULL CHECK (voting_method IN ('score')),
+    voting_mode     TEXT NOT NULL CHECK (voting_mode IN ('dm', 'quick')),
     status          TEXT NOT NULL CHECK (status IN ('open', 'closed')),
     score_min       INTEGER NOT NULL DEFAULT 0,
     score_max       INTEGER NOT NULL DEFAULT 5,
@@ -66,6 +67,7 @@ CREATE TABLE poll_sessions (
 - `ballots` primary key `(poll_id, voter_hash, option_id)` makes ballot updates an upsert — no duplicate detection logic needed in the application.
 - `poll_sessions` tracks which option a voter is currently scoring during the inline flow; cleared when voting completes.
 - `message_id` on `polls` is set after the bot posts the group message; used to edit the message when results update.
+- `voting_mode` controls whether the poll uses the private DM flow (`dm`) or group inline score buttons (`quick`).
 - All ballot history is retained after a poll closes.
 - One active poll per `chat_id` is enforced by the partial unique index `polls_one_open_per_chat`.
 - Score bounds (`score_min <= score_max`) are enforced at the poll level; per-ballot range validation lives in the application layer (`voting_methods/score.py`).
@@ -80,12 +82,11 @@ Pre-production: edit migrations in place when fixing schema design. Once the bot
 Telegram inline button callback data is size-limited. Use compact payloads:
 
 ```
-vote:<poll_id>
-results:<poll_id>
-score:<poll_id>:<option_id>:<score>
-close:<poll_id>
-done:<poll_id>
-edit:<poll_id>
+v:<poll_id>
+s:<poll_id>:<option_order>:<score>
+q:<poll_id>:<option_order>:<score>
+d:<poll_id>
+e:<poll_id>
 ```
 
 If UUID length causes issues, fall back to short numeric IDs or a token lookup table.

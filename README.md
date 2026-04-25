@@ -7,6 +7,7 @@ A Telegram bot for running score voting polls in group chats. Telegram's native 
 - Create a score voting poll in a group chat with `/scorepoll`
 - Configurable integer score range (e.g. 0–5, 0–10)
 - Guided per-option ballot via inline buttons in a private message
+- Optional quick voting mode via score buttons directly in the group message
 - Ballots are private — no individual votes posted to the group
 - Voter identities stored as HMAC-hashed IDs, never raw
 - Live aggregate results visible in the group message as votes come in

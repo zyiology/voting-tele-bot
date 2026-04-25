@@ -26,6 +26,7 @@ def upgrade() -> None:
             created_by_hash TEXT NOT NULL,
             title           TEXT NOT NULL,
             voting_method   TEXT NOT NULL CHECK (voting_method IN ('score')),
+            voting_mode     TEXT NOT NULL CHECK (voting_mode IN ('dm', 'quick')),
             status          TEXT NOT NULL CHECK (status IN ('open', 'closed')),
             score_min       INTEGER NOT NULL DEFAULT 0,
             score_max       INTEGER NOT NULL DEFAULT 5,
