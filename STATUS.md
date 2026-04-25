@@ -1,0 +1,2 @@
+-podman compose setup for bot container
+-minimal bot created (only replies fixed messages)

@@ -1,0 +1,44 @@
+# Future Work
+
+Items intentionally out of scope for MVP. Revisit once the core bot is stable.
+
+## Telegram Transport
+- [ ] Webhooks instead of long polling (requires HTTPS endpoint)
+- [ ] Caddy or nginx reverse proxy + Let's Encrypt TLS
+
+## Voting Systems
+- [ ] Approval voting
+- [ ] Ranked-choice / IRV
+- [ ] STAR voting
+- [ ] Condorcet methods
+- [ ] Majority judgment
+- [ ] Quadratic voting
+- [ ] Simple plurality
+
+## Poll Features
+- [ ] Multiple simultaneous polls per group chat
+- [ ] Hidden results until poll closes (configurable)
+- [ ] Per-poll visibility of individual votes (opt-in by creator)
+- [ ] Poll scheduling (open/close at a specific time)
+- [ ] Poll expiry / auto-close
+- [ ] Result export (CSV or similar)
+- [ ] Configurable score labels (e.g. 1=Poor, 5=Excellent)
+- [ ] Abstain option per option (currently all options must be scored)
+- [ ] Incomplete ballot partial submission
+
+## Admin & Moderation
+- [ ] Restrict poll creation to group admins only (opt-in)
+- [ ] Global admin commands
+- [ ] Audit log / ballot history export
+
+## Infrastructure
+- [ ] Web dashboard for poll management
+- [ ] Public HTTP API
+- [ ] User accounts outside Telegram
+- [ ] Multi-language / i18n support
+- [ ] Cryptographic ballot anonymity (e.g. blind signatures)
+
+## Reliability
+- [ ] Graceful handling of deleted original poll message
+- [ ] Message edit rate-limit debouncing (if needed at scale)
+- [ ] Health check endpoint for container orchestration

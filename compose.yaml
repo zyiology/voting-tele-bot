@@ -1,0 +1,9 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Containerfile
+    env_file:
+      - .env
+    restart: unless-stopped
+  # db service will be added when persistence lands
