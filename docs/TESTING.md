@@ -71,3 +71,4 @@ Either way:
 - Migrations are applied via `alembic upgrade head` against the test DSN before any repository tests run — never hand-create schema in fixtures, otherwise the test schema drifts from prod.
 - Per-test isolation is best done by wrapping each test in a transaction that rolls back, rather than truncating tables.
 - Set `DATABASE_URL` in the test env so `alembic/env.py` picks it up unchanged.
+e.g. `DATABASE_URL=postgresql://voting_bot:voting_bot@localhost:5432/voting_bot uv run pytest tests/test_repositories.py -v`

@@ -12,6 +12,7 @@ import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from voting_bot.database_url import for_sqlalchemy
 
 config = context.config
 
@@ -19,14 +20,15 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL must be set to run migrations")
 
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+SQLALCHEMY_DATABASE_URL = for_sqlalchemy(DATABASE_URL)
+config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 
 target_metadata = None
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=DATABASE_URL,
+        url=SQLALCHEMY_DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
