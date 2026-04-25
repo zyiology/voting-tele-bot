@@ -61,12 +61,8 @@ uv run pytest
 
 ## Database-Backed Tests
 
-Repository tests need a real Postgres (per project policy: no DB mocks). Two reasonable approaches:
-
-1. **Reuse the dev compose db.** Bring up the stack with `compose.dev.yaml`, then point tests at `postgresql://voting_bot:voting_bot@localhost:5432/voting_bot`. Cheap and zero-setup, but state leaks between runs unless tests clean up.
-2. **Ephemeral throwaway DB.** Spin up a one-off Postgres container per test session (e.g. via `testcontainers` or a `pytest` fixture that runs `podman run --rm postgres:18-alpine`), run `alembic upgrade head` against it, and tear it down at the end. Slower startup, fully isolated.
-
-Either way:
+Repository tests need a real Postgres (per project policy: no DB mocks). 
+Spin up a one-off Postgres container per test session (e.g. via `testcontainers` or a `pytest` fixture that runs `podman run --rm postgres:18-alpine`), run `alembic upgrade head` against it, and tear it down at the end. Slower startup, fully isolated.
 
 - Migrations are applied via `alembic upgrade head` against the test DSN before any repository tests run — never hand-create schema in fixtures, otherwise the test schema drifts from prod.
 - Per-test isolation is best done by wrapping each test in a transaction that rolls back, rather than truncating tables.
