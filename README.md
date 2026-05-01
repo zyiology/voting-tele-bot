@@ -21,7 +21,8 @@ See [`.todo`](.todo) for future work.
 
 ## Deployment
 
-The bot and Postgres run as containers via `compose.yaml`. Migrations are applied automatically on bot startup (`alembic upgrade head`).
+The bot and Postgres run as containers via `compose.yaml`. Migrations are
+run explicitly with Alembic before starting or updating the bot service.
 
 ### Prerequisites
 
@@ -38,11 +39,29 @@ Copy `.env.example` to `.env` and fill in:
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for the full variable reference.
 
-### Production / non-dev
+### Production on a VM
 
 ```
-podman compose up -d --build
+podman compose -f compose.yaml -f compose.prod.yaml build bot
+podman compose -f compose.yaml -f compose.prod.yaml up -d db
+podman compose -f compose.yaml -f compose.prod.yaml run --rm bot uv run --no-sync alembic upgrade head
+podman compose -f compose.yaml -f compose.prod.yaml up -d bot
 ```
+
+`compose.prod.yaml` enables Telegram webhooks and publishes the bot HTTP
+server on `127.0.0.1:8080` for a host-level reverse proxy such as Caddy.
+Configure Caddy on the VM to terminate TLS for
+`static.227.25.225.46.clients.your-server.de` and proxy to
+`127.0.0.1:8080`.
+
+See [`docs/deployment-vm.md`](docs/deployment-vm.md) for the full VM
+deployment guide, including an example Caddy reverse proxy config.
+
+Set these production variables in `.env`:
+
+- `WEBHOOK_URL=https://static.227.25.225.46.clients.your-server.de/tg/long-random-secret`
+- `WEBHOOK_URL_PATH=/tg/long-random-secret`
+- `WEBHOOK_SECRET_TOKEN` — generate with `openssl rand -hex 32`
 
 Postgres is reachable only on the internal compose network. Logs:
 
@@ -50,10 +69,13 @@ Postgres is reachable only on the internal compose network. Logs:
 podman compose logs -f bot
 ```
 
-To apply new migrations after pulling code, rebuild and restart the bot — `alembic upgrade head` runs on every container start:
+To apply new migrations after pulling code, rebuild the image, run
+migrations explicitly, and restart the bot:
 
 ```
-podman compose up -d --build bot
+podman compose -f compose.yaml -f compose.prod.yaml build bot
+podman compose -f compose.yaml -f compose.prod.yaml run --rm bot uv run --no-sync alembic upgrade head
+podman compose -f compose.yaml -f compose.prod.yaml up -d bot
 ```
 
 ### Development

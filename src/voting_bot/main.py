@@ -40,7 +40,16 @@ def main() -> None:
     app.add_handler(CommandHandler("closepoll", closepoll))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    app.run_polling()
+    if config.webhook_url:
+        app.run_webhook(
+            listen=config.webhook_listen_host,
+            port=config.webhook_listen_port,
+            url_path=config.webhook_url_path.lstrip("/"),
+            webhook_url=config.webhook_url,
+            secret_token=config.webhook_secret_token,
+        )
+    else:
+        app.run_polling()
 
 
 if __name__ == "__main__":

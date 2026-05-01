@@ -8,7 +8,7 @@
 | Telegram client | `python-telegram-bot` |
 | Database | PostgreSQL |
 | Containers | Podman + `compose.yaml` |
-| Telegram transport | Long polling (no public endpoint required) |
+| Telegram transport | Long polling for development; HTTPS webhooks for production |
 | Hosting | Hetzner (or similar) Linux VPS |
 
 ## Component Overview
@@ -24,11 +24,30 @@ Bot container (Python)
 PostgreSQL container
 ```
 
+Production webhook mode:
+
+```
+Telegram
+   |
+   | HTTPS webhook
+   v
+Host Caddy reverse proxy
+   |
+   | http://127.0.0.1:8080
+   v
+Bot container (Python)
+   |
+   v
+PostgreSQL container
+```
+
 **Bot application** — receives Telegram updates, handles commands and callback queries, renders poll messages, validates poll state, records ballots, updates aggregate results.
 
 **PostgreSQL** — stores polls, options, hashed voter IDs, ballots, sessions, and Telegram message references.
 
-**Podman** — runs both containers locally and in production. The database port is not exposed publicly.
+**Host Caddy** — terminates TLS on the VM and proxies Telegram webhook requests to the bot's localhost-only published port in production.
+
+**Podman** — runs the bot and database containers locally and in production. The database port is not exposed publicly.
 
 ## Request Flow
 
@@ -44,10 +63,11 @@ PostgreSQL container
 
 ```
 Ubuntu VM
+├── Caddy on the host (TLS, reverse proxy)
 ├── Podman
 │   ├── bot container
 │   └── PostgreSQL container (persistent volume, not exposed publicly)
 └── .env (secrets, never committed)
 ```
 
-Local development: `podman compose up --build`
+Local development uses long polling: `podman compose up --build`

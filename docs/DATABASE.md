@@ -2,7 +2,7 @@
 
 PostgreSQL. All tables use `ON DELETE CASCADE` so removing a poll cleans up its options, ballots, and sessions.
 
-Schema is managed by Alembic (`alembic/versions/`). The DDL below documents the current state — the migration files in `alembic/versions/` are the source of truth. The bot container runs `alembic upgrade head` on startup before launching.
+Schema is managed by Alembic (`alembic/versions/`). The DDL below documents the current state — the migration files in `alembic/versions/` are the source of truth. Migrations are run explicitly as a deployment step before starting or updating the bot service.
 
 ## Schema
 
@@ -78,7 +78,7 @@ CREATE TABLE poll_sessions (
 
 ## Migration Policy
 
-Pre-production: edit migrations in place when fixing schema design. Once the bot is running against a real environment, switch to forward-only migrations (`alembic revision -m ...`) and never edit applied files.
+Pre-production: edit migrations in place when fixing schema design. Once the bot is running against a real environment, switch to forward-only migrations (`alembic revision -m ...`) and never edit applied files. Apply migrations explicitly with `uv run alembic upgrade head`, the Compose one-off bot command, or the Cloud Run migration job.
 
 ## Callback Data Format
 

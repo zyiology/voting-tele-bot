@@ -7,8 +7,10 @@ voting-tele-bot/
 ├── .todo
 ├── pyproject.toml
 ├── Containerfile               # Bot image
+├── cloudbuild.yaml             # Cloud Build config for Cloud Run image builds
 ├── compose.yaml                # Bot + DB services
 ├── compose.dev.yaml            # Dev overrides (exposes Postgres on localhost:5432)
+├── compose.prod.yaml           # Production overrides (webhook mode on localhost:8080)
 ├── alembic.ini
 ├── scripts/
 │   └── inspect_poll_voters.py   # Inspect poll voter hashes and optionally match known Telegram IDs
@@ -22,9 +24,15 @@ voting-tele-bot/
 │   ├── SECURITY.md
 │   ├── DESIGN.md
 │   ├── DATABASE.md
+│   ├── deployment-cloud-run.md # Cloud Run service and migration job deployment guide
+│   ├── deployment-vm.md        # VM deployment guide with host reverse proxy
 │   ├── STRUCTURE.md            # This file
 │   ├── CONFIGURATION.md
-│   └── TESTING.md
+│   ├── TESTING.md
+│   └── plans/
+│       ├── init-plan.md
+│       ├── no-dm-plan.md
+│       └── webhooks-caddy-plan.md
 ├── src/
 │   └── voting_bot/
 │       ├── __init__.py

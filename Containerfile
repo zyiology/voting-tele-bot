@@ -17,4 +17,4 @@ RUN uv sync --frozen --no-dev
 COPY alembic.ini ./
 COPY alembic ./alembic
 
-CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync voting-bot"]
+CMD ["uv", "run", "--no-sync", "voting-bot"]

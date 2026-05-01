@@ -1,0 +1,9 @@
+services:
+  bot:
+    environment:
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      WEBHOOK_SECRET_TOKEN: ${WEBHOOK_SECRET_TOKEN}
+      WEBHOOK_LISTEN_HOST: 0.0.0.0
+      WEBHOOK_LISTEN_PORT: 8080
+    ports:
+      - "127.0.0.1:8080:8080"
