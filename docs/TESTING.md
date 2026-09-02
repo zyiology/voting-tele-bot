@@ -2,9 +2,7 @@
 
 ## Strategy
 
-Voting logic lives in `voting_methods/` with no Telegram dependencies, so the core rules are tested with plain pytest — no mocking of the Telegram API required.
-
-Telegram handler tests are deferred until after the core logic is stable.
+Voting logic lives in `voting_methods/` with no Telegram dependencies, so the core rules are tested with plain pytest. Telegram handlers are tested with lightweight update objects and mocked Telegram methods; repository tests use real PostgreSQL when a test database is configured.
 
 ## Test Files
 
@@ -13,6 +11,7 @@ Telegram handler tests are deferred until after the core logic is stable.
 | `tests/test_score_voting.py` | Score calculation, ranking, tie handling, ballot updates, incomplete ballots |
 | `tests/test_hashing.py` | HMAC stability, secret rotation behavior |
 | `tests/test_rendering.py` | Poll message text and keyboard structure |
+| `tests/test_handlers.py` | Command parsing, date generation, Telegram handler behavior, callbacks, handler registration |
 
 ## Key Cases
 
@@ -52,6 +51,17 @@ Results:
 - Closed poll message omits `[Vote]`, shows "CLOSED" label
 - Results ranked correctly in rendered text
 - Zero-vote state renders without errors
+
+### Native date polls (`test_handlers.py`)
+
+- Strict, locale-independent English date parsing, including leap days
+- Inclusive generation across month and year boundaries
+- Chronological weekday-prefixed labels and weekend exclusion
+- Minimum 2 and maximum 12 option boundaries
+- Bounded failure on oversized ranges after the thirteenth retained date
+- Non-anonymous, multiple-answer Telegram poll arguments
+- Group-only behavior, Telegram failure feedback, and edited-command filtering
+- Help text distinguishes private score ballots from visible date selections
 
 ## Running Tests
 

@@ -51,6 +51,8 @@ PostgreSQL container
 
 ## Request Flow
 
+### Custom score polls
+
 1. User runs `/scorepoll` in a group.
 2. Bot creates a poll record and posts a group message.
 3. In default DM mode, the group message has a `[Vote]` button. User taps it; bot opens a private DM and walks them through scoring each option.
@@ -58,6 +60,20 @@ PostgreSQL container
 5. On each score selection, bot records/updates the ballot and refreshes the group message aggregate.
 6. User taps `[Done]` in DM mode; session is cleared.
 7. Poll creator or admin runs `/closepoll`; poll status flips to `closed`, further votes are rejected.
+
+### Native date polls
+
+1. User runs `/poll_dates` with an inclusive date range and optional
+   `--exclude-weekends` flag in a group.
+2. The command handler parses and validates the range and produces 2–12
+   chronological date labels.
+3. The bot sends a non-anonymous Telegram-native poll with multiple answers
+   enabled.
+4. Telegram owns voting, vote editing, and result display. The bot does not
+   process poll-answer updates or write native date-poll state to PostgreSQL.
+
+This direct command-to-Telegram flow is independent of custom score-poll state,
+including the one-active-poll constraint and `/closepoll` lifecycle.
 
 ## Deployment
 

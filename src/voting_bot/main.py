@@ -1,11 +1,26 @@
 import logging
 
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, filters
 
 from voting_bot.config import load_config
 from voting_bot.db import Database
 from voting_bot.handlers.callbacks import handle_callback
-from voting_bot.handlers.commands import closepoll, help_command, scorepoll, start
+from voting_bot.handlers.commands import closepoll, help_command, poll_dates, scorepoll, start
+
+
+def register_handlers(app: Application) -> None:
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("scorepoll", scorepoll))
+    app.add_handler(
+        CommandHandler(
+            "poll_dates",
+            poll_dates,
+            filters=~filters.UpdateType.EDITED_MESSAGE,
+        )
+    )
+    app.add_handler(CommandHandler("closepoll", closepoll))
+    app.add_handler(CallbackQueryHandler(handle_callback))
 
 
 def main() -> None:
@@ -34,11 +49,7 @@ def main() -> None:
         .post_shutdown(post_shutdown)
         .build()
     )
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("scorepoll", scorepoll))
-    app.add_handler(CommandHandler("closepoll", closepoll))
-    app.add_handler(CallbackQueryHandler(handle_callback))
+    register_handlers(app)
 
     if config.webhook_url:
         app.run_webhook(

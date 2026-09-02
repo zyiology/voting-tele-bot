@@ -32,6 +32,29 @@ Without `--live-results`, the group message shows the number of completed ballot
 
 The bot posts a poll message in the group.
 
+## Date Availability Polls
+
+A group member can create a Telegram-native date poll from an inclusive range:
+
+```
+/poll_dates 5 Sep 2026 18 Sep 2026
+/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
+```
+
+Dates use the English `D Mon YYYY` format. Month abbreviations are
+case-insensitive. The optional `--exclude-weekends` flag removes Saturdays and
+Sundays; public holidays are not removed.
+
+The resulting regular poll asks `Which dates work? Select all that apply.` and
+lists dates chronologically with weekday-prefixed labels such as
+`Mon, 7 Sep 2026`. Multiple selections are allowed. Voting is non-anonymous, so
+participants can see who selected each option through Telegram's interface.
+
+Telegram-native polls support at most 12 options. A range that produces fewer
+than 2 or more than 12 dates after filtering is rejected with guidance to adjust
+the range. Date polls are independent of score polls: they do not consume the
+one-active-score-poll slot, and `/closepoll` does not close them.
+
 ## Group Poll Message
 
 ```

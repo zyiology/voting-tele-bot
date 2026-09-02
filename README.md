@@ -1,19 +1,43 @@
-# Telegram Score Voting Bot
+# Telegram Voting Bot
 
-A Telegram bot for running score voting polls in group chats. Telegram's native polls do not support score voting or other advanced social-choice methods. This bot fills that gap: poll creation happens via a slash command, voting happens through inline buttons in a private DM flow, and only aggregate results are shown in the group.
+A Telegram bot for running score voting and simple date-availability polls in
+group chats. Custom score polls use private inline-button ballots and show only
+aggregate results. Date availability uses Telegram's native poll interface so
+participants can select multiple dates and see who selected each option.
 
 ## MVP Features
 
 - Create a score voting poll in a group chat with `/scorepoll`
+- Create a native date-availability poll with `/poll_dates`
 - Configurable integer score range (e.g. 0–5, 0–10)
 - Guided per-option ballot via inline buttons in a private message
 - Optional quick voting mode via score buttons directly in the group message
-- Ballots are private — no individual votes posted to the group
+- Score-poll ballots are private — no individual scores are posted to the group
 - Voter identities stored as HMAC-hashed IDs, never raw
 - Live aggregate results are hidden by default while voting is open, with opt-in live display via `--live-results`
 - Ballot editing while the poll is open
 - Close a poll with `/closepoll` (creator or group admin only)
-- One active poll per group chat at a time
+- One active score poll per group chat at a time
+- Native date polls are independent of the active score-poll limit and database
+
+## Commands
+
+Create a score poll:
+
+```
+/scorepoll "Where should we eat?" "Sushi" "Pizza" "Thai"
+```
+
+Create an inclusive date-availability poll:
+
+```
+/poll_dates 5 Sep 2026 18 Sep 2026
+/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
+```
+
+Date polls accept English `D Mon YYYY` dates and at most 12 generated options.
+They are non-anonymous: voters and their selections are visible through
+Telegram. `--exclude-weekends` removes Saturdays and Sundays only.
 
 ## Out of Scope for MVP
 

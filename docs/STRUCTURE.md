@@ -31,6 +31,7 @@ voting-tele-bot/
 │   ├── TESTING.md
 │   └── plans/
 │       ├── init-plan.md
+│       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
 │       ├── no-dm-plan.md
 │       └── webhooks-caddy-plan.md
 ├── src/
@@ -50,7 +51,7 @@ voting-tele-bot/
 │       │   ├── base.py         # VotingMethod abstract base class
 │       │   └── score.py        # Score voting: validation, averages, ranking
 │       ├── handlers/
-│       │   ├── commands.py     # /scorepoll, /closepoll, /start, /help
+│       │   ├── commands.py     # /scorepoll, /poll_dates, /closepoll, /start, /help
 │       │   └── callbacks.py    # Inline button callback dispatch
 │       └── rendering.py        # Builds poll message text and InlineKeyboardMarkup
 └── tests/
@@ -69,3 +70,9 @@ voting-tele-bot/
 - `handlers/` contains all Telegram-specific logic; it calls repositories and voting methods.
 - `rendering.py` is the only place that constructs message text and keyboard layouts.
 - `repositories/` owns all SQL; no raw queries elsewhere.
+
+## Implementation Progress
+
+- `/poll_dates` creates Telegram-native, non-anonymous, multiple-answer date
+  polls without database state. Its parser and bounded date-option generator
+  live in `handlers/commands.py` and are covered by focused handler tests.

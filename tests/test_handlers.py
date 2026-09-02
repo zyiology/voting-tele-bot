@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import UUID, uuid4
 
 import pytest
-from telegram import CallbackQuery
-from telegram.ext import ContextTypes
+from telegram import CallbackQuery, Chat, Message, Update
+from telegram.error import TelegramError
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from voting_bot.handlers import callbacks
 from voting_bot.handlers.callbacks import (
@@ -18,9 +19,17 @@ from voting_bot.handlers.callbacks import (
     parse_callback_data,
 )
 from voting_bot.handlers.commands import (
+    DATE_POLL_QUESTION,
+    DatePollParseError,
+    DatePollRequest,
     ScorePollParseError,
+    generate_date_poll_options,
+    help_command,
+    parse_poll_dates_command,
     parse_scorepoll_command,
+    poll_dates,
 )
+from voting_bot.main import register_handlers
 from voting_bot.models import (
     BallotScore,
     Poll,
@@ -103,6 +112,273 @@ def test_parse_scorepoll_command_accepts_live_results() -> None:
 def test_parse_scorepoll_command_rejects_malformed_input(text: str) -> None:
     with pytest.raises(ScorePollParseError):
         parse_scorepoll_command(text)
+
+
+def test_parse_poll_dates_accepts_documented_and_botname_commands() -> None:
+    documented = parse_poll_dates_command(
+        "/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends"
+    )
+    addressed = parse_poll_dates_command(
+        "/poll_dates@calendar_bot 5 Sep 2026 18 Sep 2026"
+    )
+
+    assert documented == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), True)
+    assert addressed == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), False)
+
+
+def test_parse_poll_dates_accepts_mixed_case_months() -> None:
+    request = parse_poll_dates_command("/poll_dates 30 dEc 2026 2 jAN 2027")
+
+    assert request.start_date == date(2026, 12, 30)
+    assert request.end_date == date(2027, 1, 2)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/poll_dates --exclude-weekends 5 Sep 2026 8 Sep 2026",
+        "/poll_dates 5 Sep 2026 --exclude-weekends 8 Sep 2026",
+        "/poll_dates 5 Sep 2026 8 Sep 2026 --exclude-weekends",
+    ],
+)
+def test_parse_poll_dates_accepts_weekend_flag_in_any_position(text: str) -> None:
+    assert parse_poll_dates_command(text).exclude_weekends is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/poll_dates",
+        "/poll_dates 5 Sep 2026",
+        "/poll_dates 5 Sep 2026 8 Sep 2026 extra",
+        "/poll_dates 5 September 2026 8 Sep 2026",
+        "/poll_dates +5 Sep 2026 8 Sep 2026",
+        "/poll_dates 5 Sep 26 8 Sep 2026",
+        "/poll_dates 31 Apr 2026 2 May 2026",
+        "/poll_dates 5 Sep 2026 4 Sep 2026",
+        "/poll_dates 5 Sep 2026 8 Sep 2026 --unknown",
+        "/poll_dates 5 Sep 2026 --exclude-weekends 8 Sep 2026 "
+        "--exclude-weekends",
+    ],
+)
+def test_parse_poll_dates_rejects_invalid_input(text: str) -> None:
+    with pytest.raises(DatePollParseError):
+        parse_poll_dates_command(text)
+
+
+def test_parse_poll_dates_validates_leap_days() -> None:
+    request = parse_poll_dates_command("/poll_dates 28 Feb 2028 29 Feb 2028")
+
+    assert request.end_date == date(2028, 2, 29)
+    with pytest.raises(DatePollParseError, match="Invalid date"):
+        parse_poll_dates_command("/poll_dates 28 Feb 2027 29 Feb 2027")
+
+
+def test_generate_date_poll_options_crosses_month_and_year_in_order() -> None:
+    options = generate_date_poll_options(
+        DatePollRequest(date(2026, 12, 30), date(2027, 1, 2), False)
+    )
+
+    assert options == (
+        "Wed, 30 Dec 2026",
+        "Thu, 31 Dec 2026",
+        "Fri, 1 Jan 2027",
+        "Sat, 2 Jan 2027",
+    )
+
+
+def test_generate_date_poll_options_excludes_saturday_and_sunday() -> None:
+    options = generate_date_poll_options(
+        DatePollRequest(date(2026, 9, 5), date(2026, 9, 8), True)
+    )
+
+    assert options == ("Mon, 7 Sep 2026", "Tue, 8 Sep 2026")
+
+
+@pytest.mark.parametrize("option_count", [2, 12])
+def test_generate_date_poll_options_accepts_option_boundaries(option_count: int) -> None:
+    options = generate_date_poll_options(
+        DatePollRequest(
+            date(2026, 9, 7),
+            date(2026, 9, 7 + option_count - 1),
+            False,
+        )
+    )
+
+    assert len(options) == option_count
+
+
+def test_generate_date_poll_options_rejects_too_few_after_filtering() -> None:
+    with pytest.raises(DatePollParseError, match="at least two"):
+        generate_date_poll_options(
+            DatePollRequest(date(2026, 9, 5), date(2026, 9, 6), True)
+        )
+
+
+def test_generate_date_poll_options_stops_at_thirteenth_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    formatted_dates: list[date] = []
+
+    def track_format(value: date) -> str:
+        formatted_dates.append(value)
+        return value.isoformat()
+
+    monkeypatch.setattr(
+        "voting_bot.handlers.commands._format_english_date",
+        track_format,
+    )
+
+    with pytest.raises(DatePollParseError, match="at least 13"):
+        generate_date_poll_options(
+            DatePollRequest(date(1, 1, 1), date(9999, 12, 31), False)
+        )
+
+    assert len(formatted_dates) == 13
+
+
+def test_poll_dates_sends_native_visible_multiple_answer_poll() -> None:
+    message = SimpleNamespace(
+        text="/poll_dates 7 Sep 2026 8 Sep 2026",
+        reply_poll=AsyncMock(),
+        reply_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(type="supergroup"),
+        effective_message=message,
+    )
+
+    asyncio.run(
+        poll_dates(
+            cast(Update, update),
+            cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()),
+        )
+    )
+
+    message.reply_poll.assert_awaited_once_with(
+        DATE_POLL_QUESTION,
+        ("Mon, 7 Sep 2026", "Tue, 8 Sep 2026"),
+        allows_multiple_answers=True,
+        is_anonymous=False,
+        do_quote=False,
+    )
+
+
+def test_poll_dates_rejects_private_chats() -> None:
+    message = SimpleNamespace(
+        text="/poll_dates 7 Sep 2026 8 Sep 2026",
+        reply_poll=AsyncMock(),
+        reply_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(type="private"),
+        effective_message=message,
+    )
+
+    asyncio.run(
+        poll_dates(
+            cast(Update, update),
+            cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()),
+        )
+    )
+
+    message.reply_poll.assert_not_awaited()
+    message.reply_text.assert_awaited_once_with("Create date polls from a group chat.")
+
+
+def test_poll_dates_replies_with_usage_without_sending_invalid_poll() -> None:
+    message = SimpleNamespace(
+        text="/poll_dates 31 Feb 2026 1 Mar 2026",
+        reply_poll=AsyncMock(),
+        reply_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(type="group"),
+        effective_message=message,
+    )
+
+    asyncio.run(
+        poll_dates(
+            cast(Update, update),
+            cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()),
+        )
+    )
+
+    message.reply_poll.assert_not_awaited()
+    error_text = message.reply_text.await_args.args[0]
+    assert "Invalid date" in error_text
+    assert "Usage: /poll_dates" in error_text
+
+
+def test_poll_dates_reports_telegram_failure() -> None:
+    message = SimpleNamespace(
+        text="/poll_dates 7 Sep 2026 8 Sep 2026",
+        reply_poll=AsyncMock(side_effect=TelegramError("polls forbidden")),
+        reply_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(type="group"),
+        effective_message=message,
+    )
+
+    asyncio.run(
+        poll_dates(
+            cast(Update, update),
+            cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()),
+        )
+    )
+
+    message.reply_text.assert_awaited_once()
+    assert "permission to send polls" in message.reply_text.await_args.args[0]
+
+
+def test_help_distinguishes_score_and_date_poll_privacy() -> None:
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(effective_message=message)
+
+    asyncio.run(
+        help_command(
+            cast(Update, update),
+            cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()),
+        )
+    )
+
+    help_text = message.reply_text.await_args.args[0]
+    assert "/poll_dates" in help_text
+    assert "Score-poll ballots are private" in help_text
+    assert "Date-poll voters and their selections are visible" in help_text
+
+
+def test_register_handlers_excludes_edited_poll_dates_commands() -> None:
+    app = SimpleNamespace(add_handler=Mock())
+
+    register_handlers(cast(Application, app))
+
+    handlers = [call.args[0] for call in app.add_handler.call_args_list]
+    date_handler = next(
+        handler
+        for handler in handlers
+        if isinstance(handler, CommandHandler) and handler.callback is poll_dates
+    )
+    normal_update = Update(
+        1,
+        message=Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(-100, "group"),
+        ),
+    )
+    edited_update = Update(
+        2,
+        edited_message=Message(
+            message_id=2,
+            date=datetime.now(UTC),
+            chat=Chat(-100, "group"),
+        ),
+    )
+
+    assert date_handler.filters.check_update(normal_update)
+    assert not date_handler.filters.check_update(edited_update)
 
 
 def test_parse_callback_data_round_trips_vote_edit_done_actions() -> None:

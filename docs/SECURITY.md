@@ -1,12 +1,22 @@
 # Security & Privacy
 
-## Privacy Model
+## Score-Poll Privacy Model
 
 Individual ballots are hidden from other group members. Voting happens through private inline button interactions. The bot never posts "Alice voted 4 for Sushi." By default, the group message shows only a completed ballot count while the poll is open, then shows aggregate results after closing.
 
 Poll creators can opt into live aggregate results with `/scorepoll --live-results`. This is less private for small groups or early voting because the first completed ballot is visible as an aggregate, even though the voter identity is not shown.
 
 This is **not** cryptographic anonymity. The bot server receives Telegram user data on each interaction, and Telegram itself sees the interaction. The guarantee is: *other group members cannot see how an individual voted.*
+
+## Native Date-Poll Privacy Model
+
+`/poll_dates` deliberately creates a non-anonymous Telegram-native poll.
+Participants and organizers can inspect who selected each date through
+Telegram's interface. Telegram sends the bot per-user poll-answer updates for
+these polls, but the bot does not handle or persist those updates.
+
+The private-ballot guarantee above applies only to custom `/scorepoll` ballots;
+it does not apply to date-poll selections.
 
 ## Voter Identity Hashing
 
@@ -40,6 +50,12 @@ The PostgreSQL container must not expose its port publicly. It should be reachab
 
 - Maximum number of options per poll (e.g. 10).
 - Maximum length for poll title and option labels.
-- One active poll per group chat — prevents poll spam.
+- One active score poll per group chat — prevents score-poll spam.
 - Callback query handling is idempotent to tolerate repeated button presses.
 - Message edits are batched/debounced if Telegram rate limits become a problem.
+- Date polls are limited to 12 generated options and edited `/poll_dates`
+  commands are ignored to prevent accidental duplicates.
+
+Native date polls have no database-backed active-poll constraint, rate limit,
+or admin-only creation policy. This is acceptable for the trusted-group MVP and
+must be reconsidered before broader bot availability.

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import shlex
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 from psycopg.errors import UniqueViolation
 from telegram import Chat, Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from voting_bot.config import Config
@@ -22,10 +25,36 @@ MAX_QUICK_SCORE = 5
 MAX_TITLE_LENGTH = 140
 MAX_OPTION_LENGTH = 80
 MIN_OPTIONS = 2
+DATE_POLL_MAX_OPTIONS = 12
+DATE_POLL_MIN_OPTIONS = 2
+DATE_POLL_QUESTION = "Which dates work? Select all that apply."
+
+MONTH_NUMBERS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+MONTH_LABELS = tuple(month.title() for month in MONTH_NUMBERS)
+WEEKDAY_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+logger = logging.getLogger(__name__)
 
 SCOREPOLL_USAGE = (
     'Usage: /scorepoll [--max N] [--quick] [--live-results] '
     '"Question?" "Option A" "Option B"'
+)
+DATE_POLL_USAGE = (
+    "Usage: /poll_dates D Mon YYYY D Mon YYYY [--exclude-weekends]\n"
+    "Example: /poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends"
 )
 
 
@@ -39,6 +68,17 @@ class ScorePollRequest:
 
 
 class ScorePollParseError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class DatePollRequest:
+    start_date: date
+    end_date: date
+    exclude_weekends: bool
+
+
+class DatePollParseError(ValueError):
     pass
 
 
@@ -63,10 +103,50 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "\n".join(
             [
                 SCOREPOLL_USAGE,
-                "Close the active poll with /closepoll.",
+                DATE_POLL_USAGE,
+                "Score-poll ballots are private. Date-poll voters and their "
+                "selections are visible.",
+                "Close the active score poll with /closepoll.",
             ]
         ),
     )
+
+
+async def poll_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+
+    if not _is_group_chat(chat):
+        await reply(update, "Create date polls from a group chat.")
+        return
+
+    try:
+        request = parse_poll_dates_command(message.text or "")
+        options = generate_date_poll_options(request)
+    except DatePollParseError as exc:
+        await reply(update, f"{exc}\n{DATE_POLL_USAGE}")
+        return
+
+    try:
+        await message.reply_poll(
+            DATE_POLL_QUESTION,
+            options,
+            allows_multiple_answers=True,
+            is_anonymous=False,
+            do_quote=False,
+        )
+    except TelegramError:
+        logger.exception("Telegram could not create a native date poll")
+        try:
+            await reply(
+                update,
+                "I couldn't create the date poll. Try again or check that I have "
+                "permission to send polls.",
+            )
+        except TelegramError:
+            logger.exception("Telegram also rejected the date-poll failure reply")
 
 
 async def scorepoll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -244,6 +324,99 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
         score_max=score_max,
         voting_mode=voting_mode,
         results_visibility=results_visibility,
+    )
+
+
+def parse_poll_dates_command(text: str) -> DatePollRequest:
+    raw_args = _strip_command(text)
+    if not raw_args:
+        raise DatePollParseError("Provide a start date and an end date.")
+
+    parts = raw_args.split()
+    exclude_weekends = False
+    values: list[str] = []
+    for part in parts:
+        if part == "--exclude-weekends":
+            if exclude_weekends:
+                raise DatePollParseError(
+                    "--exclude-weekends can only be provided once."
+                )
+            exclude_weekends = True
+        elif part.startswith("--"):
+            raise DatePollParseError(f"Unknown option: {part}")
+        else:
+            values.append(part)
+
+    if len(values) != 6:
+        raise DatePollParseError(
+            "Provide exactly two dates in the format D Mon YYYY."
+        )
+
+    start_date = _parse_english_date(values[:3])
+    end_date = _parse_english_date(values[3:])
+    if end_date < start_date:
+        raise DatePollParseError("The end date cannot be earlier than the start date.")
+
+    return DatePollRequest(
+        start_date=start_date,
+        end_date=end_date,
+        exclude_weekends=exclude_weekends,
+    )
+
+
+def generate_date_poll_options(request: DatePollRequest) -> tuple[str, ...]:
+    options: list[str] = []
+    current_date = request.start_date
+    while current_date <= request.end_date:
+        if not request.exclude_weekends or current_date.weekday() < 5:
+            options.append(_format_english_date(current_date))
+            if len(options) > DATE_POLL_MAX_OPTIONS:
+                raise DatePollParseError(
+                    "The range produces at least 13 dates. Shorten the range or "
+                    "use --exclude-weekends; native polls support no more than 12."
+                )
+        current_date += timedelta(days=1)
+
+    if len(options) < DATE_POLL_MIN_OPTIONS:
+        raise DatePollParseError(
+            "The range must produce at least two dates after weekend filtering."
+        )
+
+    return tuple(options)
+
+
+def _parse_english_date(parts: list[str]) -> date:
+    day_text, month_text, year_text = parts
+    if not (
+        day_text.isascii()
+        and day_text.isdecimal()
+        and 1 <= len(day_text) <= 2
+        and year_text.isascii()
+        and year_text.isdecimal()
+        and len(year_text) == 4
+    ):
+        raise DatePollParseError(
+            f"Invalid date: {' '.join(parts)}. Use the format D Mon YYYY."
+        )
+
+    month = MONTH_NUMBERS.get(month_text.casefold())
+    if month is None:
+        raise DatePollParseError(
+            f"Invalid date: {' '.join(parts)}. Use an English month abbreviation."
+        )
+
+    try:
+        day = int(day_text)
+        year = int(year_text)
+        return date(year, month, day)
+    except ValueError as exc:
+        raise DatePollParseError(f"Invalid date: {' '.join(parts)}.") from exc
+
+
+def _format_english_date(value: date) -> str:
+    return (
+        f"{WEEKDAY_LABELS[value.weekday()]}, {value.day} "
+        f"{MONTH_LABELS[value.month - 1]} {value.year}"
     )
 
 
