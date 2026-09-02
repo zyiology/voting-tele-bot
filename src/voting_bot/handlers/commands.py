@@ -54,7 +54,8 @@ SCOREPOLL_USAGE = (
 )
 DATE_POLL_USAGE = (
     "Usage: /poll_dates D Mon YYYY D Mon YYYY [--exclude-weekends]\n"
-    "Example: /poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends"
+    "   or: /poll_dates D/M/YY D/M/YY [--exclude-weekends]\n"
+    "Example: /poll_dates 5/9/26 18/9/26 --exclude-weekends"
 )
 
 
@@ -347,13 +348,17 @@ def parse_poll_dates_command(text: str) -> DatePollRequest:
         else:
             values.append(part)
 
-    if len(values) != 6:
+    if len(values) == 6:
+        start_date = _parse_english_date(values[:3])
+        end_date = _parse_english_date(values[3:])
+    elif len(values) == 2:
+        start_date = _parse_numeric_date(values[0])
+        end_date = _parse_numeric_date(values[1])
+    else:
         raise DatePollParseError(
-            "Provide exactly two dates in the format D Mon YYYY."
+            "Provide exactly two dates in the format D Mon YYYY or D/M/YY."
         )
 
-    start_date = _parse_english_date(values[:3])
-    end_date = _parse_english_date(values[3:])
     if end_date < start_date:
         raise DatePollParseError("The end date cannot be earlier than the start date.")
 
@@ -411,6 +416,31 @@ def _parse_english_date(parts: list[str]) -> date:
         return date(year, month, day)
     except ValueError as exc:
         raise DatePollParseError(f"Invalid date: {' '.join(parts)}.") from exc
+
+
+def _parse_numeric_date(value: str) -> date:
+    parts = value.split("/")
+    if len(parts) != 3:
+        raise DatePollParseError(f"Invalid date: {value}. Use the format D/M/YY.")
+
+    day_text, month_text, year_text = parts
+    if not (
+        day_text.isascii()
+        and day_text.isdecimal()
+        and 1 <= len(day_text) <= 2
+        and month_text.isascii()
+        and month_text.isdecimal()
+        and 1 <= len(month_text) <= 2
+        and year_text.isascii()
+        and year_text.isdecimal()
+        and len(year_text) == 2
+    ):
+        raise DatePollParseError(f"Invalid date: {value}. Use the format D/M/YY.")
+
+    try:
+        return date(2000 + int(year_text), int(month_text), int(day_text))
+    except ValueError as exc:
+        raise DatePollParseError(f"Invalid date: {value}.") from exc
 
 
 def _format_english_date(value: date) -> str:

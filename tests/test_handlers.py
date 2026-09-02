@@ -133,6 +133,33 @@ def test_parse_poll_dates_accepts_mixed_case_months() -> None:
     assert request.end_date == date(2027, 1, 2)
 
 
+def test_parse_poll_dates_accepts_numeric_dates() -> None:
+    request = parse_poll_dates_command(
+        "/poll_dates 5/9/26 18/9/26 --exclude-weekends"
+    )
+
+    assert request == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), True)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_start", "expected_end"),
+    [
+        ("/poll_dates 1/1/00 2/1/00", date(2000, 1, 1), date(2000, 1, 2)),
+        ("/poll_dates 30/12/99 31/12/99", date(2099, 12, 30), date(2099, 12, 31)),
+        ("/poll_dates 01/09/26 02/09/26", date(2026, 9, 1), date(2026, 9, 2)),
+    ],
+)
+def test_parse_poll_dates_maps_numeric_years_to_2000s(
+    text: str,
+    expected_start: date,
+    expected_end: date,
+) -> None:
+    request = parse_poll_dates_command(text)
+
+    assert request.start_date == expected_start
+    assert request.end_date == expected_end
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -156,6 +183,10 @@ def test_parse_poll_dates_accepts_weekend_flag_in_any_position(text: str) -> Non
         "/poll_dates 5 Sep 26 8 Sep 2026",
         "/poll_dates 31 Apr 2026 2 May 2026",
         "/poll_dates 5 Sep 2026 4 Sep 2026",
+        "/poll_dates 5/9/26 18 Sep 2026",
+        "/poll_dates 5/9/2026 18/9/2026",
+        "/poll_dates 31/4/26 2/5/26",
+        "/poll_dates 5-9-26 18-9-26",
         "/poll_dates 5 Sep 2026 8 Sep 2026 --unknown",
         "/poll_dates 5 Sep 2026 --exclude-weekends 8 Sep 2026 "
         "--exclude-weekends",

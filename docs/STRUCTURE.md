@@ -74,5 +74,7 @@ voting-tele-bot/
 ## Implementation Progress
 
 - `/poll_dates` creates Telegram-native, non-anonymous, multiple-answer date
-  polls without database state. Its parser and bounded date-option generator
-  live in `handlers/commands.py` and are covered by focused handler tests.
+  polls without database state. Its parser accepts `D Mon YYYY` and `D/M/YY`
+  ranges, and its bounded date-option generator lives in
+  `handlers/commands.py`. Both formats have focused parser coverage in
+  `tests/test_handlers.py`.

@@ -29,6 +29,7 @@ valid in command arguments, so `--exclude-weekends` is unchanged.
 ```text
 /poll_dates 5 Sep 2026 18 Sep 2026
 /poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
+/poll_dates 5/9/26 18/9/26 --exclude-weekends
 ```
 
 The command creates a regular native poll with:
@@ -108,17 +109,21 @@ command flag if there is demand.
 
 ## Input contract and validation
 
-Accept exactly two dates in the English `D Mon YYYY` format plus an optional
-`--exclude-weekends` flag. Month abbreviations are case-insensitive. Allow the
-flag before, between, or after the dates for consistency with `/scorepoll`
-flags, but document it at the end.
+Accept exactly two dates in either the English `D Mon YYYY` format or the
+numeric `D/M/YY` format, plus an optional `--exclude-weekends` flag. Both dates
+must use the same format. Month abbreviations are case-insensitive. Numeric
+days and months may use one or two digits, and the two-digit numeric year always
+maps to 2000 through 2099 (`00` means 2000 and `99` means 2099). Allow the flag
+before, between, or after the dates for consistency with `/scorepoll` flags,
+but document it at the end.
 
-Parse months with an explicit, normalized English abbreviation-to-number map
-(`jan` through `dec`) rather than locale-dependent `strptime("%b")`. Construct
-each parsed value with `datetime.date` so invalid calendar dates are rejected.
-Format option labels explicitly from the date fields and fixed English weekday
-and month abbreviations rather than relying on the process locale or
-platform-specific `strftime` directives.
+Parse named months with an explicit, normalized English
+abbreviation-to-number map (`jan` through `dec`) rather than locale-dependent
+`strptime("%b")`. Parse numeric dates explicitly as day/month/year, without
+locale-dependent heuristics. Construct each parsed value with `datetime.date`
+so invalid calendar dates are rejected. Format option labels explicitly from
+the date fields and fixed English weekday and month abbreviations rather than
+relying on the process locale or platform-specific `strftime` directives.
 
 Validation should produce specific usage feedback for:
 
@@ -137,7 +142,8 @@ Proposed usage text:
 
 ```text
 Usage: /poll_dates D Mon YYYY D Mon YYYY [--exclude-weekends]
-Example: /poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
+   or: /poll_dates D/M/YY D/M/YY [--exclude-weekends]
+Example: /poll_dates 5/9/26 18/9/26 --exclude-weekends
 ```
 
 ## Implementation steps
@@ -192,6 +198,8 @@ Extend `tests/test_handlers.py` with focused cases for:
 
 - parsing the documented command and an `@botname` command form
 - parsing mixed-case English month abbreviations without locale dependence
+- parsing `D/M/YY`, including the `00` to 2000 and `99` to 2099 boundaries
+- rejecting mixed date formats and malformed numeric dates
 - accepting the flag in supported positions and rejecting duplicates
 - inclusive date generation across a month or year boundary
 - leap-day validation
@@ -235,6 +243,8 @@ can discover it.
 
 - The documented `/poll_dates` command creates one Telegram-native poll in a
   group or supergroup.
+- Both documented date formats, `D Mon YYYY` and `D/M/YY`, are accepted, with
+  numeric two-digit years mapped to 2000 through 2099.
 - Every retained date in the inclusive range appears exactly once and in order.
 - Participants can select multiple dates and see who selected each option using
   Telegram's native non-anonymous poll interface.

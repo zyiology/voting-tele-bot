@@ -33,11 +33,14 @@ Create an inclusive date-availability poll:
 ```
 /poll_dates 5 Sep 2026 18 Sep 2026
 /poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
+/poll_dates 5/9/26 18/9/26 --exclude-weekends
 ```
 
-Date polls accept English `D Mon YYYY` dates and at most 12 generated options.
-They are non-anonymous: voters and their selections are visible through
-Telegram. `--exclude-weekends` removes Saturdays and Sundays only.
+Date polls accept either English `D Mon YYYY` dates or numeric `D/M/YY` dates
+and at most 12 generated options. Both dates must use the same format. Numeric
+years always mean 2000 through 2099, so `26` means 2026. Date polls are
+non-anonymous: voters and their selections are visible through Telegram.
+`--exclude-weekends` removes Saturdays and Sundays only.
 
 ## Out of Scope for MVP
 

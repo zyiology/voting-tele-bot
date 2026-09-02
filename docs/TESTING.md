@@ -55,6 +55,7 @@ Results:
 ### Native date polls (`test_handlers.py`)
 
 - Strict, locale-independent English date parsing, including leap days
+- Numeric `D/M/YY` parsing, 2000–2099 year mapping, and malformed-input rejection
 - Inclusive generation across month and year boundaries
 - Chronological weekday-prefixed labels and weekend exclusion
 - Minimum 2 and maximum 12 option boundaries
