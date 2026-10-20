@@ -45,6 +45,26 @@ MONTH_NUMBERS = {
 }
 MONTH_LABELS = tuple(month.title() for month in MONTH_NUMBERS)
 WEEKDAY_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+WEEKDAY_NUMBERS = {
+    "mon": 0,
+    "monday": 0,
+    "tue": 1,
+    "tues": 1,
+    "tuesday": 1,
+    "wed": 2,
+    "wednesday": 2,
+    "thu": 3,
+    "thur": 3,
+    "thurs": 3,
+    "thursday": 3,
+    "fri": 4,
+    "friday": 4,
+    "sat": 5,
+    "saturday": 5,
+    "sun": 6,
+    "sunday": 6,
+}
+ALL_WEEKDAYS = frozenset(range(7))
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +73,11 @@ SCOREPOLL_USAGE = (
     '"Question?" "Option A" "Option B"'
 )
 DATE_POLL_USAGE = (
-    "Usage: /poll_dates D Mon YYYY D Mon YYYY [--exclude-weekends]\n"
-    "   or: /poll_dates D/M/YY D/M/YY [--exclude-weekends]\n"
-    "Example: /poll_dates 5/9/26 18/9/26 --exclude-weekends"
+    "Usage: /poll_dates D Mon YYYY D Mon YYYY [--days LIST]\n"
+    "   or: /poll_dates D/M/YY D/M/YY [--days LIST]\n"
+    "Example: /poll_dates 5/9/26 18/9/26 --days mon,tues,fri\n"
+    "Days: mon,tue,wed,thu,fri,sat,sun; full names and tues/thur/thurs also accepted.\n"
+    "Supports 2 to 12 dates after filtering."
 )
 
 
@@ -76,7 +98,7 @@ class ScorePollParseError(ValueError):
 class DatePollRequest:
     start_date: date
     end_date: date
-    exclude_weekends: bool
+    included_weekdays: frozenset[int]
 
 
 class DatePollParseError(ValueError):
@@ -328,25 +350,62 @@ def parse_scorepoll_command(text: str) -> ScorePollRequest:
     )
 
 
+def _parse_weekdays(value: str) -> frozenset[int]:
+    if not value.strip():
+        raise DatePollParseError(
+            "--days requires a comma-separated list, e.g. --days mon,tue,fri."
+        )
+    weekdays: set[int] = set()
+    for item in value.split(","):
+        name = item.strip().lower()
+        if not name:
+            raise DatePollParseError(
+                "--days contains an empty day. Provide a day between each comma."
+            )
+        if name not in WEEKDAY_NUMBERS:
+            raise DatePollParseError(
+                f'Unknown day: "{name}". Use mon,tue,wed,thu,fri,sat,sun '
+                "(tues is also accepted)."
+            )
+        weekdays.add(WEEKDAY_NUMBERS[name])
+    return frozenset(weekdays)
+
+
 def parse_poll_dates_command(text: str) -> DatePollRequest:
     raw_args = _strip_command(text)
     if not raw_args:
         raise DatePollParseError("Provide a start date and an end date.")
 
-    parts = raw_args.split()
-    exclude_weekends = False
+    lexer = shlex.shlex(raw_args, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    lexer.whitespace += "".join(sorted({c for c in raw_args if c.isspace()}))
+    try:
+        parts = list(lexer)
+    except ValueError as exc:
+        raise DatePollParseError("Malformed command. Check quotes around --days.") from exc
+
+    included_weekdays = ALL_WEEKDAYS
+    days_provided = False
     values: list[str] = []
-    for part in parts:
-        if part == "--exclude-weekends":
-            if exclude_weekends:
+    index = 0
+    while index < len(parts):
+        part = parts[index]
+        if part == "--days":
+            if days_provided:
+                raise DatePollParseError("--days can only be provided once.")
+            days_provided = True
+            index += 1
+            if index >= len(parts) or parts[index].startswith("--"):
                 raise DatePollParseError(
-                    "--exclude-weekends can only be provided once."
+                    "--days requires a comma-separated list, e.g. --days mon,tue,fri."
                 )
-            exclude_weekends = True
+            included_weekdays = _parse_weekdays(parts[index])
         elif part.startswith("--"):
             raise DatePollParseError(f"Unknown option: {part}")
         else:
             values.append(part)
+        index += 1
 
     if len(values) == 6:
         start_date = _parse_english_date(values[:3])
@@ -365,26 +424,32 @@ def parse_poll_dates_command(text: str) -> DatePollRequest:
     return DatePollRequest(
         start_date=start_date,
         end_date=end_date,
-        exclude_weekends=exclude_weekends,
+        included_weekdays=included_weekdays,
     )
 
 
 def generate_date_poll_options(request: DatePollRequest) -> tuple[str, ...]:
+    if not request.included_weekdays or not request.included_weekdays <= ALL_WEEKDAYS:
+        raise DatePollParseError("Select at least one weekday, using values from 0 to 6.")
     options: list[str] = []
     current_date = request.start_date
     while current_date <= request.end_date:
-        if not request.exclude_weekends or current_date.weekday() < 5:
+        if current_date.weekday() in request.included_weekdays:
             options.append(_format_english_date(current_date))
             if len(options) > DATE_POLL_MAX_OPTIONS:
                 raise DatePollParseError(
-                    "The range produces at least 13 dates. Shorten the range or "
-                    "use --exclude-weekends; native polls support no more than 12."
+                    "The range produces at least 13 dates after day filtering. "
+                    "Shorten the range or select fewer days; native polls support "
+                    "no more than 12."
                 )
+        if current_date == request.end_date:
+            break
         current_date += timedelta(days=1)
 
     if len(options) < DATE_POLL_MIN_OPTIONS:
         raise DatePollParseError(
-            "The range must produce at least two dates after weekend filtering."
+            "The range must produce at least two dates after day filtering. "
+            "Extend the range or select more days."
         )
 
     return tuple(options)

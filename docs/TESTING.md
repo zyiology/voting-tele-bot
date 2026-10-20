@@ -57,12 +57,22 @@ Results:
 - Strict, locale-independent English date parsing, including leap days
 - Numeric `D/M/YY` parsing, 2000–2099 year mapping, and malformed-input rejection
 - Inclusive generation across month and year boundaries
-- Chronological weekday-prefixed labels and weekend exclusion
-- Minimum 2 and maximum 12 option boundaries
-- Bounded failure on oversized ranges after the thirteenth retained date
-- Non-anonymous, multiple-answer Telegram poll arguments
+- Chronological weekday-prefixed labels, selected days, and legacy weekend exclusion
+- Quoted/unquoted day lists, all aliases, case folding, duplicate normalization,
+  bot-addressed commands, and flag positions in both date formats
+- Unicode whitespace separators and quoted list contents, including nonbreaking
+  and narrow nonbreaking spaces; rejection of unquoted lists containing spaces
+- Missing/empty/unknown day values, malformed quotes, duplicate/conflicting flags,
+  unsupported syntax, and extra arguments
+- Exact requested examples, single-weekday ranges, filtered leap days and year boundaries
+- Zero, one, two, twelve, and thirteen retained dates; limits apply after filtering
+- Bounded failure on oversized ranges after the thirteenth retained date,
+  including a single selected weekday; safe generation through `date.max`
+- Directly constructed empty and out-of-range weekday selections fail before scanning
+- Exact filtered, non-anonymous, multiple-answer Telegram poll arguments
+- Invalid day input returns usage feedback without sending a poll
 - Group-only behavior, Telegram failure feedback, and edited-command filtering
-- Help text distinguishes private score ballots from visible date selections
+- Help text advertises `--days` and distinguishes private score ballots from visible date selections
 
 ## Running Tests
 

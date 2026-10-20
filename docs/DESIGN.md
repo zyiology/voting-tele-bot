@@ -37,17 +37,30 @@ The bot posts a poll message in the group.
 A group member can create a Telegram-native date poll from an inclusive range:
 
 ```
-/poll_dates 5 Sep 2026 18 Sep 2026
-/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
-/poll_dates 5/9/26 18/9/26 --exclude-weekends
+/poll_dates 5 Sep 2026 12 Sep 2026
+/poll_dates 5/9/26 18/9/26 --days 'mon,tues,fri'
+/poll_dates 5/9/26 18/9/26 --days 'fri,sat,sun'
 ```
 
 Dates use either the English `D Mon YYYY` format or the numeric `D/M/YY`
 format, with both dates in a command using the same format. Month abbreviations
 are case-insensitive. Numeric days and months may have one or two digits;
 numeric years map to 2000 through 2099 (`00` means 2000 and `99` means 2099).
-The optional `--exclude-weekends` flag removes Saturdays and Sundays; public
-holidays are not removed.
+Without `--days`, every date in the range is included. `--days LIST` selects
+weekdays using one comma-separated argument. Names are case-insensitive:
+`mon,tue,wed,thu,fri,sat,sun`, full English names, and `tues`, `thur`, `thurs`.
+Single or double quotes are required when the list contains spaces; whitespace
+around each name is stripped. Unicode whitespace, including nonbreaking spaces,
+is supported between command arguments and inside quoted lists. Duplicate names
+and aliases collapse into one selection; list order does not change date order.
+One selected weekday is allowed when at least two dates remain.
+
+`--days` may appear before, between, or after the dates; examples use trailing
+flags. Repeating `--days`, missing or empty lists, empty comma-separated items,
+unknown names, malformed quotes, unknown flags, and extra arguments return usage
+feedback without creating a poll. `--days=...`, numeric weekdays, day ranges,
+and special names such as `weekdays` are unsupported. Public holidays are not
+removed.
 
 The resulting regular poll asks `Which dates work? Select all that apply.` and
 lists dates chronologically with weekday-prefixed labels such as
@@ -56,7 +69,8 @@ participants can see who selected each option through Telegram's interface.
 
 Telegram-native polls support at most 12 options. A range that produces fewer
 than 2 or more than 12 dates after filtering is rejected with guidance to adjust
-the range. Date polls are independent of score polls: they do not consume the
+the range or the selected days. Generation stops at the thirteenth retained date.
+Date polls are independent of score polls: they do not consume the
 one-active-score-poll slot, and `/closepoll` does not close them.
 
 ## Group Poll Message

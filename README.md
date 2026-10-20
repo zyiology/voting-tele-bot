@@ -31,16 +31,26 @@ Create a score poll:
 Create an inclusive date-availability poll:
 
 ```
-/poll_dates 5 Sep 2026 18 Sep 2026
-/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends
-/poll_dates 5/9/26 18/9/26 --exclude-weekends
+/poll_dates 5 Sep 2026 12 Sep 2026
+/poll_dates 5/9/26 18/9/26 --days 'mon,tues,fri'
+/poll_dates 5/9/26 18/9/26 --days 'fri,sat,sun'
 ```
 
 Date polls accept either English `D Mon YYYY` dates or numeric `D/M/YY` dates
-and at most 12 generated options. Both dates must use the same format. Numeric
-years always mean 2000 through 2099, so `26` means 2026. Date polls are
+and require 2–12 generated options after day filtering. Both dates must use the
+same format. Numeric years always mean 2000 through 2099, so `26` means 2026. Date polls are
 non-anonymous: voters and their selections are visible through Telegram.
-`--exclude-weekends` removes Saturdays and Sundays only.
+
+Use `--days` with a comma-separated list to select days of the week. Accepted
+names are `mon,tue,wed,thu,fri,sat,sun`, full English names, and the aliases
+`tues`, `thur`, and `thurs`, all case-insensitive. Quote lists containing spaces,
+e.g. `--days "mon, tues, fri"`; lists without spaces may be unquoted. Repeated
+days are combined, and dates always appear once in chronological order. A single
+selected weekday works if the range contains at least two occurrences.
+
+Without `--days`, all dates are included. Public holidays are not removed.
+Extend the range or select more days if fewer than two dates remain; shorten the
+range or select fewer days if more than twelve remain.
 
 ## Out of Scope for MVP
 

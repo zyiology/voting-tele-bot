@@ -30,6 +30,7 @@ voting-tele-bot/
 │   ├── CONFIGURATION.md
 │   ├── TESTING.md
 │   └── plans/
+│       ├── date-poll-days-filter-plan.md # Implemented selectable days for date polls
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
 │       ├── no-dm-plan.md
@@ -73,6 +74,13 @@ voting-tele-bot/
 
 ## Implementation Progress
 
+- `/poll_dates --days` is implemented with English aliases, quoted lists,
+  Unicode whitespace support, and duplicate-day normalization. The legacy
+  `--exclude-weekends` flag has been removed, and `DATE_POLL_USAGE` now documents
+  `--days` and the 2–12 filtered date limit. Weekday selections are validated
+  before generation, option limits apply after filtering, and generation safely
+  handles `date.max` and oversized ranges.
+  See [plans/date-poll-days-filter-plan.md](plans/date-poll-days-filter-plan.md).
 - `/poll_dates` creates Telegram-native, non-anonymous, multiple-answer date
   polls without database state. Its parser accepts `D Mon YYYY` and `D/M/YY`
   ranges, and its bounded date-option generator lives in

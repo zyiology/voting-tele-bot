@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, Mock
@@ -116,14 +116,18 @@ def test_parse_scorepoll_command_rejects_malformed_input(text: str) -> None:
 
 def test_parse_poll_dates_accepts_documented_and_botname_commands() -> None:
     documented = parse_poll_dates_command(
-        "/poll_dates 5 Sep 2026 18 Sep 2026 --exclude-weekends"
+        "/poll_dates 5 Sep 2026 18 Sep 2026 --days mon,tue,wed,thu,fri"
     )
     addressed = parse_poll_dates_command(
         "/poll_dates@calendar_bot 5 Sep 2026 18 Sep 2026"
     )
 
-    assert documented == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), True)
-    assert addressed == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), False)
+    assert documented == DatePollRequest(
+        date(2026, 9, 5), date(2026, 9, 18), frozenset(range(5))
+    )
+    assert addressed == DatePollRequest(
+        date(2026, 9, 5), date(2026, 9, 18), frozenset(range(7))
+    )
 
 
 def test_parse_poll_dates_accepts_mixed_case_months() -> None:
@@ -135,10 +139,12 @@ def test_parse_poll_dates_accepts_mixed_case_months() -> None:
 
 def test_parse_poll_dates_accepts_numeric_dates() -> None:
     request = parse_poll_dates_command(
-        "/poll_dates 5/9/26 18/9/26 --exclude-weekends"
+        "/poll_dates 5/9/26 18/9/26 --days mon,tue,wed,thu,fri"
     )
 
-    assert request == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), True)
+    assert request == DatePollRequest(
+        date(2026, 9, 5), date(2026, 9, 18), frozenset(range(5))
+    )
 
 
 @pytest.mark.parametrize(
@@ -163,18 +169,6 @@ def test_parse_poll_dates_maps_numeric_years_to_2000s(
 @pytest.mark.parametrize(
     "text",
     [
-        "/poll_dates --exclude-weekends 5 Sep 2026 8 Sep 2026",
-        "/poll_dates 5 Sep 2026 --exclude-weekends 8 Sep 2026",
-        "/poll_dates 5 Sep 2026 8 Sep 2026 --exclude-weekends",
-    ],
-)
-def test_parse_poll_dates_accepts_weekend_flag_in_any_position(text: str) -> None:
-    assert parse_poll_dates_command(text).exclude_weekends is True
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
         "/poll_dates",
         "/poll_dates 5 Sep 2026",
         "/poll_dates 5 Sep 2026 8 Sep 2026 extra",
@@ -188,8 +182,7 @@ def test_parse_poll_dates_accepts_weekend_flag_in_any_position(text: str) -> Non
         "/poll_dates 31/4/26 2/5/26",
         "/poll_dates 5-9-26 18-9-26",
         "/poll_dates 5 Sep 2026 8 Sep 2026 --unknown",
-        "/poll_dates 5 Sep 2026 --exclude-weekends 8 Sep 2026 "
-        "--exclude-weekends",
+        "/poll_dates 5 Sep 2026 8 Sep 2026 --exclude-weekends",
     ],
 )
 def test_parse_poll_dates_rejects_invalid_input(text: str) -> None:
@@ -207,7 +200,7 @@ def test_parse_poll_dates_validates_leap_days() -> None:
 
 def test_generate_date_poll_options_crosses_month_and_year_in_order() -> None:
     options = generate_date_poll_options(
-        DatePollRequest(date(2026, 12, 30), date(2027, 1, 2), False)
+        DatePollRequest(date(2026, 12, 30), date(2027, 1, 2), frozenset(range(7)))
     )
 
     assert options == (
@@ -220,19 +213,21 @@ def test_generate_date_poll_options_crosses_month_and_year_in_order() -> None:
 
 def test_generate_date_poll_options_excludes_saturday_and_sunday() -> None:
     options = generate_date_poll_options(
-        DatePollRequest(date(2026, 9, 5), date(2026, 9, 8), True)
+        DatePollRequest(date(2026, 9, 5), date(2026, 9, 8), frozenset(range(5)))
     )
 
     assert options == ("Mon, 7 Sep 2026", "Tue, 8 Sep 2026")
 
 
 @pytest.mark.parametrize("option_count", [2, 12])
-def test_generate_date_poll_options_accepts_option_boundaries(option_count: int) -> None:
+def test_generate_date_poll_options_accepts_option_boundaries(
+    option_count: int,
+) -> None:
     options = generate_date_poll_options(
         DatePollRequest(
             date(2026, 9, 7),
             date(2026, 9, 7 + option_count - 1),
-            False,
+            frozenset(range(7)),
         )
     )
 
@@ -242,7 +237,7 @@ def test_generate_date_poll_options_accepts_option_boundaries(option_count: int)
 def test_generate_date_poll_options_rejects_too_few_after_filtering() -> None:
     with pytest.raises(DatePollParseError, match="at least two"):
         generate_date_poll_options(
-            DatePollRequest(date(2026, 9, 5), date(2026, 9, 6), True)
+            DatePollRequest(date(2026, 9, 5), date(2026, 9, 6), frozenset(range(5)))
         )
 
 
@@ -262,15 +257,239 @@ def test_generate_date_poll_options_stops_at_thirteenth_date(
 
     with pytest.raises(DatePollParseError, match="at least 13"):
         generate_date_poll_options(
-            DatePollRequest(date(1, 1, 1), date(9999, 12, 31), False)
+            DatePollRequest(date(1, 1, 1), date(9999, 12, 31), frozenset(range(7)))
         )
 
     assert len(formatted_dates) == 13
 
 
-def test_poll_dates_sends_native_visible_multiple_answer_poll() -> None:
+@pytest.mark.parametrize(
+    "dates", [("5/9/26", "18/9/26"), ("5 Sep 2026", "18 Sep 2026")]
+)
+@pytest.mark.parametrize("position", [0, 1, 2])
+@pytest.mark.parametrize(
+    "days", ["mon,tues,fri", "'Mon, tUeS, FRI'", '"mon, tues, fri"']
+)
+def test_parse_poll_dates_accepts_days_in_any_position(
+    dates: tuple[str, str], position: int, days: str
+) -> None:
+    args = list(dates)
+    args.insert(position, f"--days {days}")
+    request = parse_poll_dates_command("/poll_dates@calendar_bot " + " ".join(args))
+
+    assert request == DatePollRequest(
+        date(2026, 9, 5), date(2026, 9, 18), frozenset({0, 1, 4})
+    )
+
+
+@pytest.mark.parametrize(
+    ("aliases", "weekday"),
+    [
+        ("mon,monday,MON", 0),
+        ("tue,tues,tuesday", 1),
+        ("wed,wednesday", 2),
+        ("thu,thur,thurs,thursday", 3),
+        ("fri,friday", 4),
+        ("sat,saturday", 5),
+        ("sun,sunday", 6),
+    ],
+)
+def test_parse_poll_dates_normalizes_aliases(aliases: str, weekday: int) -> None:
+    request = parse_poll_dates_command(f"/poll_dates 5/9/26 18/9/26 --days {aliases}")
+    assert request.included_weekdays == frozenset({weekday})
+
+
+@pytest.mark.parametrize("separator", ["\u00a0", "\u202f"])
+@pytest.mark.parametrize("dates", ["5/9/26 18/9/26", "5 Sep 2026 18 Sep 2026"])
+@pytest.mark.parametrize(
+    ("flag", "weekdays"),
+    [
+        ("", frozenset(range(7))),
+        ('--days "mon, tues, fri"', frozenset({0, 1, 4})),
+    ],
+)
+def test_parse_poll_dates_preserves_unicode_whitespace(
+    separator: str, dates: str, flag: str, weekdays: frozenset[int]
+) -> None:
+    text = f"/poll_dates {dates} {flag}".replace(" ", separator)
+    request = parse_poll_dates_command(text)
+    assert request == DatePollRequest(date(2026, 9, 5), date(2026, 9, 18), weekdays)
+
+
+@pytest.mark.parametrize(
+    ("flag", "error"),
+    [
+        ("--days", "requires a comma-separated list"),
+        ("--days --unknown", "requires a comma-separated list"),
+        ("--days ''", "requires a comma-separated list"),
+        ('--days "  "', "requires a comma-separated list"),
+        ("--days mon,,fri", "contains an empty day"),
+        ("--days ,mon", "contains an empty day"),
+        ("--days mon,", "contains an empty day"),
+        ("--days funday", "Unknown day"),
+        ("--days 0", "Unknown day"),
+        ("--days mon-fri", "Unknown day"),
+        ("--days weekdays", "Unknown day"),
+        ("--days 'mon,fri", "Malformed command"),
+        ('--days "mon,fri', "Malformed command"),
+        ("--days mon --days fri", "only be provided once"),
+        ("--days=mon,fri", "Unknown option"),
+        ("--days mon, fri", "contains an empty day"),
+        ("--days mon,fri extra", "exactly two dates"),
+        ("--days mon,\u00a0fri", "contains an empty day"),
+        ("--days mon,\u202ffri", "contains an empty day"),
+        ("--days mon,fri # comment", "exactly two dates"),
+    ],
+)
+def test_parse_poll_dates_rejects_invalid_days(flag: str, error: str) -> None:
+    with pytest.raises(DatePollParseError, match=error):
+        parse_poll_dates_command(f"/poll_dates 5/9/26 18/9/26 {flag}")
+
+
+def test_date_poll_filters_preserve_existing_results() -> None:
+    command = "/poll_dates 5/9/26 14/9/26"
+    original = parse_poll_dates_command(command)
+    selected = parse_poll_dates_command(
+        f"{command} --days mon,tue,wed,thu,fri,sat,sun"
+    )
+    assert original == selected
+    assert generate_date_poll_options(original) == generate_date_poll_options(selected)
+
+
+@pytest.mark.parametrize(
+    ("days", "expected"),
+    [
+        (
+            "mon,tues,fri",
+            (
+                "Mon, 7 Sep 2026",
+                "Tue, 8 Sep 2026",
+                "Fri, 11 Sep 2026",
+                "Mon, 14 Sep 2026",
+                "Tue, 15 Sep 2026",
+                "Fri, 18 Sep 2026",
+            ),
+        ),
+        (
+            "fri,sat,sun",
+            (
+                "Sat, 5 Sep 2026",
+                "Sun, 6 Sep 2026",
+                "Fri, 11 Sep 2026",
+                "Sat, 12 Sep 2026",
+                "Sun, 13 Sep 2026",
+                "Fri, 18 Sep 2026",
+            ),
+        ),
+        (
+            "fri,mon,monday,mon",
+            (
+                "Mon, 7 Sep 2026",
+                "Fri, 11 Sep 2026",
+                "Mon, 14 Sep 2026",
+                "Fri, 18 Sep 2026",
+            ),
+        ),
+    ],
+)
+def test_date_poll_days_examples(days: str, expected: tuple[str, ...]) -> None:
+    request = parse_poll_dates_command(f"/poll_dates 5/9/26 18/9/26 --days '{days}'")
+    assert generate_date_poll_options(request) == expected
+
+
+@pytest.mark.parametrize(
+    ("dates", "days", "expected"),
+    [
+        ("30/12/26 2/1/27", "wed,sat", ("Wed, 30 Dec 2026", "Sat, 2 Jan 2027")),
+        ("28/2/28 1/3/28", "tue,wed", ("Tue, 29 Feb 2028", "Wed, 1 Mar 2028")),
+    ],
+)
+def test_date_poll_days_cross_calendar_boundaries(
+    dates: str, days: str, expected: tuple[str, ...]
+) -> None:
+    request = parse_poll_dates_command(f"/poll_dates {dates} --days {days}")
+    assert generate_date_poll_options(request) == expected
+
+
+@pytest.mark.parametrize("count", [0, 1, 2, 12, 13])
+def test_date_poll_limits_apply_after_single_weekday_filter(count: int) -> None:
+    start = date(2026, 9, 7)
+    request = DatePollRequest(
+        start,
+        start + timedelta(days=max(0, count - 1) * 7),
+        frozenset({1 if count == 0 else 0}),
+    )
+    if count < 2:
+        with pytest.raises(
+            DatePollParseError, match="Extend the range or select more days"
+        ):
+            generate_date_poll_options(request)
+    elif count > 12:
+        with pytest.raises(DatePollParseError, match="at least 13"):
+            generate_date_poll_options(request)
+    else:
+        options = generate_date_poll_options(request)
+        assert len(options) == count
+        assert options[0] == "Mon, 7 Sep 2026"
+        assert all(option.startswith("Mon,") for option in options)
+
+
+def test_date_poll_single_weekday_stops_after_thirteenth_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    formatted: list[date] = []
+
+    def track_format(value: date) -> str:
+        formatted.append(value)
+        return value.isoformat()
+
+    monkeypatch.setattr(
+        "voting_bot.handlers.commands._format_english_date", track_format
+    )
+    with pytest.raises(DatePollParseError, match="at least 13"):
+        generate_date_poll_options(DatePollRequest(date.min, date.max, frozenset({0})))
+    assert formatted == [date.min + timedelta(weeks=i) for i in range(13)]
+
+
+@pytest.mark.parametrize(
+    "weekdays", [frozenset(), frozenset({-1}), frozenset({7}), frozenset({0, 7})]
+)
+def test_date_poll_rejects_invalid_direct_weekdays_before_scanning(
+    weekdays: frozenset[int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_on_iteration(*args: object, **kwargs: object) -> None:
+        pytest.fail("Invalid weekday selection must fail before date iteration")
+
+    monkeypatch.setattr(
+        "voting_bot.handlers.commands._format_english_date", fail_on_iteration
+    )
+    monkeypatch.setattr("voting_bot.handlers.commands.timedelta", fail_on_iteration)
+    with pytest.raises(DatePollParseError, match="Select at least one weekday"):
+        generate_date_poll_options(DatePollRequest(date.min, date.max, weekdays))
+
+
+@pytest.mark.parametrize(
+    "weekdays", [frozenset(range(7)), frozenset({3, 4}), frozenset({2, 3})]
+)
+def test_date_poll_handles_date_max(weekdays: frozenset[int]) -> None:
+    options = generate_date_poll_options(
+        DatePollRequest(date(9999, 12, 29), date.max, weekdays)
+    )
+    expected = {2: "Wed, 29 Dec 9999", 3: "Thu, 30 Dec 9999", 4: "Fri, 31 Dec 9999"}
+    assert options == tuple(label for day, label in expected.items() if day in weekdays)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/poll_dates 7 Sep 2026 8 Sep 2026",
+        "/poll_dates 5/9/26 10/9/26 --days mon,tues",
+    ],
+)
+def test_poll_dates_sends_native_visible_multiple_answer_poll(text: str) -> None:
     message = SimpleNamespace(
-        text="/poll_dates 7 Sep 2026 8 Sep 2026",
+        text=text,
         reply_poll=AsyncMock(),
         reply_text=AsyncMock(),
     )
@@ -317,9 +536,19 @@ def test_poll_dates_rejects_private_chats() -> None:
     message.reply_text.assert_awaited_once_with("Create date polls from a group chat.")
 
 
-def test_poll_dates_replies_with_usage_without_sending_invalid_poll() -> None:
+@pytest.mark.parametrize(
+    ("text", "error"),
+    [
+        ("/poll_dates 31 Feb 2026 1 Mar 2026", "Invalid date"),
+        ("/poll_dates 5/9/26 18/9/26 --days funday", "Unknown day"),
+    ],
+)
+def test_poll_dates_replies_with_usage_without_sending_invalid_poll(
+    text: str,
+    error: str,
+) -> None:
     message = SimpleNamespace(
-        text="/poll_dates 31 Feb 2026 1 Mar 2026",
+        text=text,
         reply_poll=AsyncMock(),
         reply_text=AsyncMock(),
     )
@@ -337,7 +566,7 @@ def test_poll_dates_replies_with_usage_without_sending_invalid_poll() -> None:
 
     message.reply_poll.assert_not_awaited()
     error_text = message.reply_text.await_args.args[0]
-    assert "Invalid date" in error_text
+    assert error in error_text
     assert "Usage: /poll_dates" in error_text
 
 
@@ -376,6 +605,9 @@ def test_help_distinguishes_score_and_date_poll_privacy() -> None:
 
     help_text = message.reply_text.await_args.args[0]
     assert "/poll_dates" in help_text
+    assert "[--days LIST]" in help_text
+    assert "--exclude-weekends" not in help_text
+    assert "Supports 2 to 12 dates after filtering." in help_text
     assert "Score-poll ballots are private" in help_text
     assert "Date-poll voters and their selections are visible" in help_text
 
