@@ -30,6 +30,8 @@ voting-tele-bot/
 │   ├── CONFIGURATION.md
 │   ├── TESTING.md
 │   └── plans/
+│       ├── add-condorcet-voting-plan.md # Ranked-ballot proposal; tentatively abandoned
+│       ├── condorcet-from-scores-plan.md # Proposed dual results from existing scores
 │       ├── date-poll-days-filter-plan.md # Implemented selectable days for date polls
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
@@ -74,6 +76,15 @@ voting-tele-bot/
 
 ## Implementation Progress
 
+- Condorcet direction revised on 2026-10-21: the
+  [new plan](plans/condorcet-from-scores-plan.md) derives pairwise preferences from
+  existing score ballots and announces score and Condorcet winners separately,
+  with no Condorcet fallback. The [ranked-ballot plan](plans/add-condorcet-voting-plan.md)
+  is tentatively abandoned. Implementation awaits plan review; date availability
+  remains independent.
+- VM deployment inspected on 2026-10-20; operational details and maintenance
+  commands are recorded in `/root/README.md` on the VM. The bot uses Docker
+  Compose with `unless-stopped` restart policies and host Caddy for HTTPS.
 - `/poll_dates --days` is implemented with English aliases, quoted lists,
   Unicode whitespace support, and duplicate-day normalization. The legacy
   `--exclude-weekends` flag has been removed, and `DATE_POLL_USAGE` now documents
