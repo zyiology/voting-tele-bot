@@ -10,10 +10,6 @@ each type of winner. Users decide how to use that information. There is no
 combined winner, preferred method, automatic runoff, or fallback when a Condorcet
 winner does not exist.
 
-This replaces the [tentatively abandoned ranked-ballot plan](add-condorcet-voting-plan.md).
-Its separate command, ranked storage, draft/submission system, migration, and
-method-dispatch expansion are not prerequisites for this approach.
-
 ## Feasibility and scope
 
 This is a small extension of the existing score tally and rendering path.
