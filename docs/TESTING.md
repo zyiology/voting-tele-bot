@@ -8,6 +8,7 @@ Voting logic lives in `voting_methods/` with no Telegram dependencies, so the co
 
 | File | Covers |
 |---|---|
+| `tests/test_condorcet_voting.py` | Score-derived pairwise counts, outcomes, validation, shared normalization and invariants |
 | `tests/test_score_voting.py` | Score calculation, ranking, tie handling, ballot updates, incomplete ballots |
 | `tests/test_hashing.py` | HMAC stability, secret rotation behavior |
 | `tests/test_rendering.py` | Poll message text and keyboard structure |
@@ -37,6 +38,29 @@ Results:
   Pizza avg = 3.0
   Winner: Sushi
 ```
+
+### Score-derived Condorcet results (`test_condorcet_voting.py`)
+
+- No ballots, unique winners, all equal scores, tied top scores, cycles,
+  head-to-head ties, and a winner above a cycle among losers
+- Distinct UUID validation, including empty input and repeated identities;
+  duplicate labels remain valid
+- Different score/Condorcet winners; unweighted preferences, negative scores,
+  and 2–1 preferences with 7 indifferent voters
+- Directional counts plus indifference equal the common complete-ballot count
+- Shared filtering, last-row normalization, final-score completion, and edits
+- Stable winner identities under input reordering and relabeling; legacy score
+  calculation remains identical and preserves all tied score winners
+
+Rendering and handler tests verify hidden/live/closed visibility, provisional
+labels, separate outcomes, duplicate label numbering after ranking, rounded
+averages, Unicode message budgets, both voting modes, group instructions, help,
+and a single saved-score fetch on refresh. Native date-poll coverage is unchanged.
+
+Before rollout, manually smoke-test a hidden poll and a live quick poll in
+Telegram using both the different-winners and cycle examples in the
+[implementation plan](plans/condorcet-from-scores-plan.md). Automated rendering
+and mocked Telegram refresh checks do not replace this live check.
 
 ### Hashing (`test_hashing.py`)
 

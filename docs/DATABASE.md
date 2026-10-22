@@ -64,6 +64,13 @@ CREATE TABLE poll_sessions (
 );
 ```
 
+## Derived score-poll results
+
+Both average-score results and score-derived Condorcet results use existing
+`ballots` rows. Neither pairwise counts nor winners are persisted; there is no
+schema change or data conversion, and `voting_method` remains `score`. Both
+analyses include only voters with a saved score for every poll option.
+
 ## Notes
 
 - `ballots` primary key `(poll_id, voter_hash, option_id)` makes ballot updates an upsert — no duplicate detection logic needed in the application.

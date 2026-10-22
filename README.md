@@ -8,6 +8,7 @@ participants can select multiple dates and see who selected each option.
 ## MVP Features
 
 - Create a score voting poll in a group chat with `/scorepoll`
+- Report score winners and the Condorcet winner derived from those same scores
 - Create a native date-availability poll with `/poll_dates`
 - Configurable integer score range (e.g. 0–5, 0–10)
 - Guided per-option ballot via inline buttons in a private message
@@ -27,6 +28,18 @@ Create a score poll:
 ```
 /scorepoll "Where should we eat?" "Sushi" "Pizza" "Thai"
 ```
+
+Every score poll reports two separate outcomes from the same complete ballots:
+all options tied for the highest average score, and a Condorcet winner if one
+option strictly beats every other option head-to-head. Higher scores express
+pairwise preference; equal scores mean no preference. Score gaps do not weight
+pairwise votes. Pairwise ties or cycles can leave no Condorcet winner; the bot
+uses no fallback or combined winner. Participants decide how to use the results.
+
+The last missing score completes a ballot automatically. Editing a complete
+ballot immediately updates both analyses; DM Done only ends the session. Both
+results stay hidden until close unless `--live-results` is enabled, when they
+are provisional. Native date availability remains independent.
 
 Create an inclusive date-availability poll:
 

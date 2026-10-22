@@ -30,7 +30,7 @@ voting-tele-bot/
 │   ├── CONFIGURATION.md
 │   ├── TESTING.md
 │   └── plans/
-│       ├── condorcet-from-scores-plan.md # Proposed dual results from existing scores
+│       ├── condorcet-from-scores-plan.md # Implemented dual results from existing scores
 │       ├── date-poll-days-filter-plan.md # Implemented selectable days for date polls
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
@@ -52,6 +52,9 @@ voting-tele-bot/
 │       ├── voting_methods/
 │       │   ├── __init__.py
 │       │   ├── base.py         # VotingMethod abstract base class
+│       │   ├── ballots.py      # Shared complete score-ballot normalization
+│       │   ├── analysis.py     # Both analyses from one normalized snapshot
+│       │   ├── condorcet.py    # Strict pairwise majorities derived from scores
 │       │   └── score.py        # Score voting: validation, averages, ranking
 │       ├── handlers/
 │       │   ├── commands.py     # /scorepoll, /poll_dates, /closepoll, /start, /help
@@ -62,6 +65,7 @@ voting-tele-bot/
     ├── test_database_url.py
     ├── test_hashing.py
     ├── test_repositories.py
+    ├── test_condorcet_voting.py
     ├── test_score_voting.py
     ├── test_handlers.py
     └── test_rendering.py
@@ -85,8 +89,17 @@ voting-tele-bot/
 - Condorcet plan proposed on 2026-10-21: the
   [implementation plan](plans/condorcet-from-scores-plan.md) derives pairwise preferences from
   existing score ballots and announces score and Condorcet winners separately,
-  with no Condorcet fallback. Implementation awaits plan review; date
-  availability remains independent.
+  with no Condorcet fallback. Reviewed on 2026-10-22 with approved plan
+  refinements for group-message explanations, duplicate-label winner summaries,
+  and distinct-option validation tests. Implemented on 2026-10-22: one shared
+  complete-ballot snapshot drives both analyses, separate winner summaries follow
+  existing visibility rules, duplicate labels use original option numbers, and
+  open group messages and help explain equal-score indifference. Date availability
+  remains independent; no schema or dependency changes. Verification: lint and
+  type checks passed; 217 tests passed and 9 database tests skipped without a
+  configured test database. Live Telegram smoke tests remain a pre-rollout step.
+  DESIGN examples now include the open-poll explanation and quick-mode
+  zero-ballot notice to match rendered messages.
 - VM deployment inspected on 2026-10-20; operational details and maintenance
   commands are recorded in `/root/README.md` on the VM. The bot uses Docker
   Compose with `unless-stopped` restart policies and host Caddy for HTTPS.

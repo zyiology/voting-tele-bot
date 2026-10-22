@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from voting_bot.models import BallotScore, PollOption, ScoreOptionResult, ScorePollResult
+from voting_bot.voting_methods.ballots import complete_score_ballots
 
 
 class ScoreValidationError(Exception):
@@ -25,25 +26,17 @@ def tally_score_poll(
     options: list[PollOption],
     ballot_scores: list[BallotScore],
 ) -> ScorePollResult:
-    option_by_id = {option.id: option for option in options}
-    expected_option_ids = set(option_by_id)
+    return _tally_complete_score_ballots(
+        poll_id, options, complete_score_ballots(poll_id, options, ballot_scores)
+    )
 
-    scores_by_voter: dict[str, dict[UUID, int]] = defaultdict(dict)
-    for ballot_score in ballot_scores:
-        if ballot_score.poll_id != poll_id:
-            continue
-        if ballot_score.option_id not in expected_option_ids:
-            continue
 
-        scores_by_voter[ballot_score.voter_hash][ballot_score.option_id] = (
-            ballot_score.score
-        )
-
-    complete_ballots = [
-        scores
-        for scores in scores_by_voter.values()
-        if set(scores) == expected_option_ids
-    ]
+def _tally_complete_score_ballots(
+    poll_id: UUID,
+    options: Sequence[PollOption],
+    complete_ballots: Sequence[Mapping[UUID, int]],
+) -> ScorePollResult:
+    expected_option_ids = {option.id for option in options}
 
     totals = dict.fromkeys(expected_option_ids, 0)
     for scores in complete_ballots:

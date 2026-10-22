@@ -112,6 +112,36 @@ class ScorePollResult:
         )
 
 
+class CondorcetOutcome(StrEnum):
+    NO_BALLOTS = "no_ballots"
+    WINNER = "winner"
+    NO_WINNER = "no_winner"
+
+
+@dataclass(frozen=True)
+class PairwiseComparison:
+    option_a_id: UUID
+    option_b_id: UUID
+    a_over_b: int
+    b_over_a: int
+    indifferent_count: int
+
+
+@dataclass(frozen=True)
+class CondorcetPollResult:
+    poll_id: UUID
+    complete_ballot_count: int
+    outcome: CondorcetOutcome
+    winner_option_id: UUID | None
+    comparisons: tuple[PairwiseComparison, ...]
+
+
+@dataclass(frozen=True)
+class ScorePollResults:
+    score: ScorePollResult
+    condorcet: CondorcetPollResult
+
+
 def _rank_score_option_results(
     option_results: tuple[ScoreOptionResult, ...],
 ) -> tuple[ScoreOptionResult, ...]:

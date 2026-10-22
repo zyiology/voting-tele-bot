@@ -15,7 +15,7 @@ from voting_bot.db import Database
 from voting_bot.handlers.callbacks import refresh_group_poll
 from voting_bot.hashing import hash_voter_id
 from voting_bot.models import ResultsVisibility, VotingMode
-from voting_bot.rendering import render_group_poll
+from voting_bot.rendering import SCORE_RESULTS_EXPLANATION, render_group_poll
 from voting_bot.repositories import polls
 
 
@@ -116,7 +116,9 @@ async def reply(update: Update, text: str) -> None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await reply(
         update,
-        "Hi! I run score voting polls. Use /scorepoll in a group to start one.",
+        "Hi! I run score voting polls. Use /scorepoll in a group to start one. "
+        "Each poll reports score and Condorcet winners separately. "
+        + SCORE_RESULTS_EXPLANATION,
     )
 
 
@@ -127,6 +129,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             [
                 SCOREPOLL_USAGE,
                 DATE_POLL_USAGE,
+                "Score winners have the highest average. A Condorcet winner must "
+                "beat every other option head-to-head; there may be none.",
+                SCORE_RESULTS_EXPLANATION,
+                "Only complete ballots count for both results. The last missing "
+                "score completes your ballot; edits immediately affect results. "
+                "Done ends the DM session.",
                 "Score-poll ballots are private. Date-poll voters and their "
                 "selections are visible.",
                 "Close the active score poll with /closepoll.",

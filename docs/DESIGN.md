@@ -78,17 +78,24 @@ one-active-score-poll slot, and `/closepoll` does not close them.
 ```
 Where should we eat?
 
+Scores determine both results. Higher scores express pairwise preference; equal scores mean no preference.
+
 Options:
 1. Sushi
 2. Pizza
 3. Thai
 
 Votes cast: 0
+No complete ballots yet.
 
 [Vote]
 ```
 
-The message is updated in-place as complete ballots come in. Individual votes are never shown.
+Every open group message, including initial creation, hidden results, and quick
+mode, explains: “Scores determine both results. Higher scores express pairwise
+preference; equal scores mean no preference.” This explanation appears above the
+option list or results. The message is updated in-place as scores change.
+Individual ballots are not posted.
 
 ## Voting Flow (private DM)
 
@@ -120,12 +127,15 @@ When a poll is created with `--quick`, the group message shows score buttons for
 ```
 Where should we eat?
 
+Scores determine both results. Higher scores express pairwise preference; equal scores mean no preference.
+
 Options:
 1. Sushi
 2. Pizza
 3. Thai
 
 Votes cast: 0
+No complete ballots yet.
 
 [1. Sushi: 0] [1] [2] [3] [4] [5]
 [2. Pizza: 0] [1] [2] [3] [4] [5]
@@ -142,6 +152,8 @@ While the poll is open, the default group message hides option-level aggregate r
 
 ```
 Where should we eat?
+
+Scores determine both results. Higher scores express pairwise preference; equal scores mean no preference.
 
 Options:
 1. Sushi
@@ -160,17 +172,26 @@ If the creator uses `--live-results`, the open poll message shows live aggregate
 ```
 Where should we eat?
 
+Scores determine both results. Higher scores express pairwise preference; equal scores mean no preference.
+
 Votes cast: 7
 
 Current results:
 1. Thai — avg 4.1
 2. Sushi — avg 3.8
 3. Pizza — avg 3.2
+Provisional results; scores can still change.
+
+Score winner: Thai
+Condorcet winner (from scores): Sushi
 
 [Vote]
 ```
 
-Only **complete ballots** (every option scored) count toward results.
+Only **complete ballots** (every option scored) count toward either result.
+The example shows that highest average and head-to-head winner can differ; the
+bot announces both without choosing between them. Live summaries are provisional.
+Both summaries and averages are hidden for open hidden-results polls.
 
 After closing:
 
@@ -181,6 +202,9 @@ Final results (7 votes):
 1. Thai — avg 4.1
 2. Sushi — avg 3.8
 3. Pizza — avg 3.2
+
+Score winner: Thai
+Condorcet winner (from scores): Sushi
 ```
 
 ## Closing a Poll
@@ -196,6 +220,20 @@ Only the poll creator or a group admin may close the poll. After closing, the `[
 - Integer scale: configurable min–max, default 0–5.
 - Every option must be scored for a ballot to count.
 - Abstaining on individual options is not supported.
-- The winner is the option with the highest average score.
+- Score winners are all options tied for the highest average, using dense ranks.
+- A Condorcet winner strictly beats every other option in pairwise comparisons.
+  Each voter contributes one preference for the higher-scored option regardless
+  of score difference; equal scores contribute indifference. For example, 2–1
+  with 7 indifferent is a win. A tied pair is not a win.
+- Pairwise ties and cycles can produce no Condorcet winner, displayed as
+  `Condorcet winner (from scores): None.` followed by
+  `No option beats every other option head-to-head.` There is no fallback.
+- Tied score summaries use `Score winners (tied): A, B`. Duplicate labels are
+  allowed; winner summaries disambiguate them with the original option number,
+  such as `2. Pizza`, rather than their result rank.
+- Zero complete ballots produce no winner summaries: “No complete ballots yet”
+  while open, or “No complete ballots were cast” after closing.
+- The final missing score completes a ballot automatically. Done clears the DM
+  session. Edits to complete ballots immediately affect both live analyses.
 - Results are hidden while the poll is open unless the creator uses `--live-results`.
 - Only complete ballots are included in averages.

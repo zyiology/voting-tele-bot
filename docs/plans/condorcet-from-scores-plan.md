@@ -2,13 +2,35 @@
 
 ## Status and confirmed direction
 
-Proposed implementation plan, 21 October 2026. Implementation awaits user review;
-this planning task makes no application, database, or test changes.
+Implemented on 22 October 2026 following user approval of the reviewed plan.
+The original design and acceptance criteria below are retained for reference.
+
+Reviewed on 22 October 2026: no blocking design issues were found. The user
+approved adding the review refinements below: explain both results directly in
+the group poll message before voting, disambiguate duplicate option labels in
+winner summaries, and explicitly test the distinct-option validation boundary.
+These documentation changes do not start implementation.
 
 The user chose to reuse existing scores to calculate both results and announce
 each type of winner. Users decide how to use that information. There is no
 combined winner, preferred method, automatic runoff, or fallback when a Condorcet
 winner does not exist.
+
+## Implementation and verification status
+
+- Shared normalization in `voting_methods/ballots.py` preserves legacy score
+  behavior; `analysis.py` passes one snapshot to both pure tallies.
+- Frozen domain types retain explicit Condorcet outcomes and pairwise counts.
+  The Condorcet boundary rejects fewer than two distinct option UUIDs.
+- Rendering reports separate winners, handles duplicate labels with original
+  option numbers, preserves visibility and keyboards, and explains the rule in
+  every open group message. Start/help describe both analyses.
+- Approved tests and documentation are updated. `uv run ruff check` and
+  `uv run ty check` passed; `uv run pytest` reports 217 passed and 9 skipped.
+  Database tests require a configured test database and were skipped.
+- No migration, dependency, configuration, or deployment changes were needed.
+  Live Telegram smoke tests remain required before rollout; they were not run
+  in this local implementation session. No production posts were refreshed.
 
 ## Feasibility and scope
 
@@ -131,15 +153,21 @@ reveals neither winner, averages, nor pairwise information. Live results are
 clearly provisional, and closing reveals both final summaries. Continue removing
 voting controls on close.
 
-Briefly explain the rule in poll instructions/help: “Scores determine both
+Briefly explain the rule directly in every open group poll message, from initial
+creation and throughout voting in both DM and quick modes: “Scores determine both
 results. Higher scores express pairwise preference; equal scores mean no
-preference.” Participants should know this before voting, including in quick
-mode. Full pairwise tables and detail buttons are unnecessary for the first
-version; retain pairwise counts in the result model for verification and future
-explanations.
+preference.” Also include the explanation in help; participants must not need to
+open help to learn the rule before voting. Full pairwise tables and detail
+buttons are unnecessary for the first version; retain pairwise counts in the
+result model for verification and future explanations.
 
 Reuse option identity and display order for stable presentation, never as a
-tie-breaker. Bound text at the existing ten-option and label/title limits;
+tie-breaker. Duplicate option labels remain allowed. When a winner's label is
+shared by another option, include its original option number
+(`display_order + 1`) in either winner summary, for example
+`Condorcet winner (from scores): 2. Pizza`. Use this rule for tied score winners too; do not use
+the result rank as the option number or introduce a new label restriction.
+Bound text at the existing ten-option and label/title limits;
 test the all-score-winners case, Unicode, and long labels. Avoid adding a matrix
 that unnecessarily expands the group message.
 
@@ -176,8 +204,10 @@ In `models.py`, add immutable result types for:
 Implement the pairwise algorithm in `voting_methods/condorcet.py`. Initialize all
 pairs, accumulate directional/indifferent counts, and identify an option winning
 every comparison. Handle zero ballots explicitly. Invalid internal option lists
-with fewer than two options must not produce a vacuous winner; reject them with
-a clear validation error at the Condorcet tally boundary.
+with fewer than two distinct option UUIDs must not produce a vacuous winner;
+reject them with a clear validation error at the Condorcet tally boundary.
+Repeated entries for the same UUID do not count as distinct options, even if
+their labels differ. Distinct UUIDs with identical labels remain valid options.
 
 For V complete ballots and N options, computation is `O(V * N²)` and pairwise
 storage is `O(N²)`, excluding input storage. At ten options there are 45 pairs per
@@ -193,7 +223,7 @@ needed.
 | `voting_methods/score.py` | Reuse normalization; preserve score results/API |
 | `voting_methods/condorcet.py` (new) | Pure score-derived pairwise tally |
 | `voting_methods/__init__.py` and a small orchestration module if needed | Expose combined analysis without circular imports |
-| `rendering.py` | Compute combined analysis from its existing ballot input and display both outcomes under the same visibility guard |
+| `rendering.py` | Compute combined analysis from its existing ballot input, display both outcomes under the same visibility guard, explain the rule in every open group poll message, and disambiguate duplicate winner labels with original option numbers |
 | `handlers/commands.py` | Explain both outcomes in help/start text; preserve command syntax |
 
 Keep `render_group_poll(poll, options, ballot_scores)` compatible. Its callers
@@ -226,6 +256,9 @@ coverage after the applicable approval checkpoint.
 Algorithm examples and invariants:
 
 - Zero complete ballots; one complete ballot with a unique top score; two options.
+- Reject zero options, one option, and multiple entries sharing only one option
+  UUID at the Condorcet tally boundary, including when there are no ballots.
+  Accept two distinct option UUIDs even when their labels are identical.
 - All equal scores: all options tie for score winner, no Condorcet winner.
 - A single voter tying two top options: neither can be a Condorcet winner.
 - Majority preference with indifferent voters: 2–1–7 behaves as defined above.
@@ -251,6 +284,12 @@ Rendering and integration:
   closed polls expose both as final and remove voting controls.
 - Zero ballots, tied score winners, differing winners, and no Condorcet winner
   have distinct clear output. Rounded average text does not determine ties.
+- Duplicate labels are accepted; ambiguous score and Condorcet winner summaries,
+  including tied score winners, show original option numbers rather than result
+  ranks and identify the correct UUIDs after ranking.
+- Initial and refreshed open group messages explain both analyses and equal-score
+  indifference in DM and quick modes, including hidden-results and zero-ballot
+  states, without requiring participants to open help.
 - Long labels, maximum options, all tied winners, Unicode, and title lengths
   fit the supported message budget.
 - Existing DM, quick, completion/edit, close authorization, and callback behavior

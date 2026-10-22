@@ -610,6 +610,10 @@ def test_help_distinguishes_score_and_date_poll_privacy() -> None:
     assert "Supports 2 to 12 dates after filtering." in help_text
     assert "Score-poll ballots are private" in help_text
     assert "Date-poll voters and their selections are visible" in help_text
+    assert "Score winners have the highest average" in help_text
+    assert "A Condorcet winner must beat every other option head-to-head" in help_text
+    assert "equal scores mean no preference" in help_text
+    assert "Only complete ballots count for both results" in help_text
 
 
 def test_register_handlers_excludes_edited_poll_dates_commands() -> None:
@@ -817,3 +821,37 @@ def _make_options(poll_id: UUID) -> list[PollOption]:
         PollOption(uuid4(), poll_id, "Sushi", 0),
         PollOption(uuid4(), poll_id, "Pizza", 1),
     ]
+
+
+@pytest.mark.parametrize('mode', list(VotingMode))
+@pytest.mark.parametrize('visibility', list(ResultsVisibility))
+@pytest.mark.parametrize('status', list(PollStatus))
+def test_refresh_uses_one_saved_snapshot_for_both_results(monkeypatch, mode, visibility, status):
+    from dataclasses import replace
+
+    poll = replace(_make_poll(voting_mode=mode), results_visibility=visibility, status=status)
+    options = _make_options(poll.id)
+    rows = [
+        BallotScore(poll.id, str(voter), option.id, score)
+        for voter, values in enumerate([(3, 2), (3, 2), (0, 3)])
+        for option, score in zip(options, values, strict=True)
+    ]
+    db = object()
+    list_scores = AsyncMock(return_value=rows)
+    edit_message = AsyncMock()
+    monkeypatch.setattr(callbacks, '_db', lambda context: db)
+    monkeypatch.setattr(callbacks.ballots, 'list_ballot_scores', list_scores)
+    context = SimpleNamespace(bot=SimpleNamespace(edit_message_text=edit_message))
+    asyncio.run(callbacks.refresh_group_poll(cast(ContextTypes.DEFAULT_TYPE, context), poll, options))
+    list_scores.assert_awaited_once_with(db, poll.id)
+    edit_message.assert_awaited_once()
+    assert edit_message.await_args is not None
+    args = edit_message.await_args.kwargs
+    text = args['text']
+    if status == PollStatus.OPEN and visibility == ResultsVisibility.HIDDEN_UNTIL_CLOSED:
+        assert 'winner' not in text
+        assert 'avg' not in text
+    else:
+        assert 'Score winner: Pizza' in text
+        assert 'Condorcet winner (from scores): Sushi' in text
+    assert (args['reply_markup'] is None) == (status == PollStatus.CLOSED)

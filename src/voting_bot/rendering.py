@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from uuid import UUID
 
@@ -12,9 +13,16 @@ from voting_bot.models import (
     PollStatus,
     ResultsVisibility,
     ScorePollResult,
+    ScorePollResults,
     VotingMode,
 )
-from voting_bot.voting_methods.score import tally_score_poll
+from voting_bot.voting_methods import tally_score_poll_results
+
+
+SCORE_RESULTS_EXPLANATION = (
+    "Scores determine both results. Higher scores express pairwise preference; "
+    "equal scores mean no preference."
+)
 
 
 def vote_callback_data(poll_id: UUID) -> str:
@@ -42,12 +50,21 @@ def render_group_poll(
     options: Sequence[PollOption],
     ballot_scores: Sequence[BallotScore],
 ) -> tuple[str, InlineKeyboardMarkup | None]:
-    result = tally_score_poll(poll.id, list(options), list(ballot_scores))
+    results = tally_score_poll_results(poll.id, options, ballot_scores)
+    result = results.score
     lines = [_poll_title(poll), ""]
+
+    if poll.status == PollStatus.OPEN:
+        lines.extend([SCORE_RESULTS_EXPLANATION, ""])
 
     if result.complete_ballot_count == 0:
         lines.extend(_option_lines(options))
         lines.extend(["", "Votes cast: 0"])
+        lines.append(
+            "No complete ballots were cast."
+            if poll.status == PollStatus.CLOSED
+            else "No complete ballots yet."
+        )
     elif _should_hide_results(poll):
         lines.extend(_option_lines(options))
         lines.extend(
@@ -66,6 +83,9 @@ def render_group_poll(
         )
         lines.extend([f"Votes cast: {result.complete_ballot_count}", "", result_label])
         lines.extend(_result_lines(result))
+        if poll.status == PollStatus.OPEN:
+            lines.append("Provisional results; scores can still change.")
+        lines.extend(["", *_winner_lines(results, options)])
 
     keyboard = None
     if poll.status == PollStatus.OPEN:
@@ -150,6 +170,35 @@ def _result_lines(result: ScorePollResult) -> list[str]:
             f"{option_result.rank}. {option_result.option.label} - "
             f"avg {option_result.average_score:.1f}"
         )
+    return lines
+
+
+def _winner_lines(
+    results: ScorePollResults,
+    options: Sequence[PollOption],
+) -> list[str]:
+    label_counts = Counter(option.label for option in options)
+
+    def winner_label(option: PollOption) -> str:
+        if label_counts[option.label] > 1:
+            return f"{option.display_order + 1}. {option.label}"
+        return option.label
+
+    score_winners = results.score.winners
+    score_label = "Score winner" if len(score_winners) == 1 else "Score winners (tied)"
+    lines = [
+        f"{score_label}: "
+        + ", ".join(winner_label(winner.option) for winner in score_winners)
+    ]
+    winner_id = results.condorcet.winner_option_id
+    if winner_id is not None:
+        winner = next(option for option in options if option.id == winner_id)
+        lines.append(f"Condorcet winner (from scores): {winner_label(winner)}")
+    else:
+        lines.extend([
+            "Condorcet winner (from scores): None.",
+            "No option beats every other option head-to-head.",
+        ])
     return lines
 
 

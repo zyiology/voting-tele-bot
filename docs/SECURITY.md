@@ -6,7 +6,12 @@ Individual ballots are hidden from other group members. Voting happens through p
 
 Poll creators can opt into live aggregate results with `/scorepoll --live-results`. This is less private for small groups or early voting because the first completed ballot is visible as an aggregate, even though the voter identity is not shown.
 
-This is **not** cryptographic anonymity. The bot server receives Telegram user data on each interaction, and Telegram itself sees the interaction. The guarantee is: *other group members cannot see how an individual voted.*
+Both score and score-derived Condorcet summaries follow the same visibility
+setting. Small aggregates and live changes can reveal preferences, particularly
+with one voter or knowledge of other ballots. The Condorcet label does not add
+anonymity. Individual ballot rows and pairwise tables are not posted.
+
+This is **not** cryptographic anonymity. The bot server receives Telegram user data on each interaction, and Telegram itself sees the interaction. The bot does not directly publish individual ballots, but aggregate results can still allow inferences about them.
 
 ## Native Date-Poll Privacy Model
 

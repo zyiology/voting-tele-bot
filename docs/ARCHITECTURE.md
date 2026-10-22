@@ -58,8 +58,22 @@ PostgreSQL container
 3. In default DM mode, the group message has a `[Vote]` button. User taps it; bot opens a private DM and walks them through scoring each option.
 4. In quick mode (`/scorepoll --quick`), the group message has score buttons for each option. Each tap records that user's score and answers the callback with private progress feedback.
 5. On each score selection, bot records/updates the ballot and refreshes the group message aggregate.
-6. User taps `[Done]` in DM mode; session is cleared.
+   The shared renderer normalizes this saved snapshot once: foreign/unknown
+   rows are ignored, the last row for each voter/option wins, and incomplete
+   ballots are excluded. `analysis.py` passes the same complete score maps to
+   `score.py` and `condorcet.py`. Frozen result types retain both outcomes and
+   each pair's directional and indifferent counts. Condorcet tally requires at
+   least two distinct option UUIDs; equal labels are allowed.
+6. User taps `[Done]` in DM mode; session is cleared. The last missing score
+   already made the ballot count; edits to a complete ballot affect both tallies
+   immediately, including intermediate scores during a multi-option edit.
 7. Poll creator or admin runs `/closepoll`; poll status flips to `closed`, further votes are rejected.
+
+Pairwise tally takes `O(V * N²)` time and `O(N²)` pairwise storage for V complete
+ballots and N options. At the ten-option limit there are 45 pairs per voter.
+Results are recomputed on refresh without another query, cache, new dependency,
+or migration. The stored method remains `score`. This change does not alter the
+existing close-versus-score-write race.
 
 ### Native date polls
 
