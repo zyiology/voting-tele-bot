@@ -35,6 +35,7 @@ voting-tele-bot/
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
 │       ├── no-dm-plan.md
+│       ├── quick-voting-ux-plan.md  # Proposed UX improvements for --quick polls
 │       └── webhooks-caddy-plan.md
 ├── src/
 │   └── voting_bot/
@@ -75,6 +76,12 @@ voting-tele-bot/
 
 ## Implementation Progress
 
+- Quick voting UX plan recorded on 2026-10-22 in
+  [plans/quick-voting-ux-plan.md](plans/quick-voting-ux-plan.md): adds a
+  `[My ballot]` modal alert button (`show_alert=True`), concise group-message
+  voting instructions, `#N: 0` score button prefixes with a persistent option
+  legend, and skips redundant group message edits on partial taps. Scheduled
+  after [plans/condorcet-from-scores-plan.md](plans/condorcet-from-scores-plan.md).
 - Condorcet plan proposed on 2026-10-21: the
   [implementation plan](plans/condorcet-from-scores-plan.md) derives pairwise preferences from
   existing score ballots and announces score and Condorcet winners separately,
