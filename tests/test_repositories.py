@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+from types import SimpleNamespace
+from typing import cast
 from uuid import UUID, uuid4
 
 import psycopg
@@ -9,8 +11,10 @@ import pytest
 from alembic import command
 from alembic.config import Config as AlembicConfig
 from psycopg.errors import ForeignKeyViolation, UniqueViolation
+from telegram.ext import ContextTypes
 
-from voting_bot.db import Database
+from voting_bot.db import Database, Row
+from voting_bot.handlers.callbacks import refresh_group_poll
 from voting_bot.models import (
     PollStatus,
     ResultsVisibility,
@@ -362,6 +366,193 @@ def test_poll_session_upsert_get_and_clear(database_url: str) -> None:
             finally:
                 await _delete_poll(db, poll.id)
 
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("existing_score", [False, True])
+def test_closed_poll_rejects_score_insert_and_edit(database_url: str, existing_score: bool):
+    async def run():
+        async with _connected_db(database_url) as db:
+            poll, options = await polls.create_score_poll(
+                db, chat_id=_unique_chat_id(), created_by_hash="creator", title="Lunch",
+                option_labels=["Sushi", "Pizza"], score_min=0, score_max=5,
+            )
+            try:
+                if existing_score:
+                    await ballots.upsert_score(
+                        db, poll_id=poll.id, voter_hash="voter", option_id=options[0].id, score=2,
+                    )
+                await polls.close_poll(db, poll.id)
+                before = await ballots.list_ballot_scores(db, poll.id)
+                with pytest.raises(ballots.PollNotOpenError):
+                    await ballots.upsert_score(
+                        db, poll_id=poll.id, voter_hash="voter", option_id=options[0].id, score=5,
+                    )
+                assert await ballots.list_ballot_scores(db, poll.id) == before
+            finally:
+                await _delete_poll(db, poll.id)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("close_first", [False, True])
+def test_close_and_score_serialize_across_connections(database_url: str, close_first: bool):
+    async def run():
+        async with (
+            _connected_db(database_url) as db,
+            _connected_db(database_url) as writer,
+            _connected_db(database_url) as closer,
+        ):
+            poll, options = await polls.create_score_poll(
+                db, chat_id=_unique_chat_id(), created_by_hash="creator", title="Lunch",
+                option_labels=["Sushi", "Pizza"], score_min=0, score_max=5,
+            )
+            writer_pid = await writer.fetch_one("SELECT pg_backend_pid() AS pid")
+            closer_pid = await closer.fetch_one("SELECT pg_backend_pid() AS pid")
+            assert writer_pid is not None and closer_pid is not None
+            try:
+                # Queue both real repository operations behind an explicit row
+                # lock. Observe database waits rather than relying on sleeps to
+                # guess which operation acquired the lock first.
+                async with asyncio.TaskGroup() as tasks:
+                    async with db.transaction() as connection:
+                        await connection.execute(
+                            "SELECT id FROM polls WHERE id = %s FOR UPDATE", (poll.id,),
+                        )
+                        if close_first:
+                            close_task = tasks.create_task(polls.close_poll(closer, poll.id))
+                            await _wait_for_row_lock(connection, closer_pid["pid"])
+                        score_task = tasks.create_task(_attempt_score(writer, poll.id, options[0].id))
+                        await _wait_for_row_lock(connection, writer_pid["pid"])
+                        if not close_first:
+                            close_task = tasks.create_task(polls.close_poll(closer, poll.id))
+                            await _wait_for_row_lock(connection, closer_pid["pid"])
+                assert close_task.result() is not None
+                assert score_task.result() is (not close_first)
+                scores = await ballots.list_ballot_scores(db, poll.id)
+                assert [score.score for score in scores] == ([] if close_first else [5])
+                closed = await polls.get_poll(db, poll.id)
+                assert closed is not None and closed.status == PollStatus.CLOSED
+            finally:
+                await _delete_poll(db, poll.id)
+    asyncio.run(run())
+
+
+async def _attempt_score(db: Database, poll_id: UUID, option_id: UUID) -> bool:
+    try:
+        await ballots.upsert_score(
+            db, poll_id=poll_id, voter_hash="voter", option_id=option_id, score=5,
+        )
+    except ballots.PollNotOpenError:
+        return False
+    return True
+
+
+async def _wait_for_row_lock(connection: psycopg.AsyncConnection[Row], pid: int) -> None:
+    async with asyncio.timeout(5):
+        while True:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT cardinality(pg_blocking_pids(%s)) > 0 AS waiting", (pid,),
+                )
+                row = await cursor.fetchone()
+                if row and row["waiting"]:
+                    return
+            await asyncio.sleep(0.01)
+
+
+def test_delayed_refresh_cannot_overwrite_closed_message(database_url: str):
+    async def run():
+        async with (
+            _connected_db(database_url) as db,
+            _connected_db(database_url) as other,
+        ):
+            poll, options = await polls.create_score_poll(
+                db, chat_id=_unique_chat_id(), created_by_hash="creator", title="Lunch",
+                option_labels=["Sushi", "Pizza"], score_min=0, score_max=5,
+            )
+            poll = await polls.set_poll_message_id(db, poll_id=poll.id, message_id=123)
+            assert poll is not None
+            edit_started = asyncio.Event()
+            release_edit = asyncio.Event()
+            messages = []
+
+            async def edit(**kwargs):
+                if not edit_started.is_set():
+                    edit_started.set()
+                    await release_edit.wait()
+                messages.append(kwargs)
+
+            bot = SimpleNamespace(edit_message_text=edit)
+            context = cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace(bot=bot, bot_data={"db": db}))
+            other_context = cast(
+                ContextTypes.DEFAULT_TYPE, SimpleNamespace(bot=bot, bot_data={"db": other}),
+            )
+            try:
+                async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+                    tasks.create_task(refresh_group_poll(context, poll, options))
+                    await edit_started.wait()
+                    closed = await polls.close_poll(other, poll.id)
+                    assert closed is not None
+                    tasks.create_task(refresh_group_poll(other_context, closed, options))
+                    try:
+                        # The closed refresh must wait for the in-flight open
+                        # edit, even though it uses a different Database object.
+                        async with asyncio.timeout(5):
+                            while True:
+                                waiting = await other.fetch_one(
+                                    """
+                                    SELECT EXISTS (
+                                        SELECT FROM pg_locks
+                                        WHERE locktype = 'advisory' AND NOT granted
+                                          AND database = (
+                                              SELECT oid FROM pg_database
+                                              WHERE datname = current_database()
+                                          )
+                                    ) AS waiting
+                                    """,
+                                )
+                                if waiting and waiting["waiting"]:
+                                    break
+                                await asyncio.sleep(0.01)
+                        assert not messages
+                    finally:
+                        release_edit.set()
+                assert messages[0]["reply_markup"] is not None
+                assert messages[1]["reply_markup"] is None
+                assert "CLOSED" in messages[1]["text"]
+                # A much later refresh with an old Poll object must also render
+                # the database's closed state rather than restore voting buttons.
+                await refresh_group_poll(context, poll, options)
+                assert messages[-1]["reply_markup"] is None
+                assert "CLOSED" in messages[-1]["text"]
+            finally:
+                release_edit.set()
+                await _delete_poll(db, poll.id)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_refresh_lock_is_released_on_failure(database_url: str, cancel: bool):
+    async def run():
+        async with _connected_db(database_url) as db, _connected_db(database_url) as other:
+            poll_id = uuid4()
+            entered = asyncio.Event()
+
+            async def fail():
+                async with polls.message_refresh_lock(db, poll_id):
+                    entered.set()
+                    if cancel:
+                        await asyncio.Event().wait()
+                    raise RuntimeError("Telegram failed")
+
+            task = asyncio.create_task(fail())
+            await asyncio.wait_for(entered.wait(), timeout=5)
+            if cancel:
+                task.cancel()
+            with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
+                await task
+            async with asyncio.timeout(5), polls.message_refresh_lock(other, poll_id):
+                assert await other.fetch_one("SELECT 1 AS ok") == {"ok": 1}
     asyncio.run(run())
 
 

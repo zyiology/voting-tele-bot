@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
@@ -798,6 +799,40 @@ def test_record_quick_score_rejects_dm_poll(monkeypatch: pytest.MonkeyPatch) -> 
     upsert_score.assert_not_awaited()
 
 
+@pytest.mark.parametrize("mode", list(VotingMode))
+def test_score_reports_closure_during_save(monkeypatch: pytest.MonkeyPatch, mode: VotingMode):
+    poll = _make_poll(voting_mode=mode)
+    options = _make_options(poll.id)
+    query = SimpleNamespace(answer=AsyncMock())
+    private_message = AsyncMock()
+    refresh = AsyncMock()
+    get_scores = AsyncMock()
+    monkeypatch.setattr(callbacks, "_db", lambda context: object())
+    monkeypatch.setattr(
+        callbacks.polls, "get_poll_with_options", AsyncMock(return_value=(poll, options))
+    )
+    monkeypatch.setattr(
+        callbacks.ballots, "upsert_score",
+        AsyncMock(side_effect=callbacks.ballots.PollNotOpenError),
+    )
+    monkeypatch.setattr(callbacks.ballots, "get_voter_scores", get_scores)
+    monkeypatch.setattr(callbacks, "_send_private_message", private_message)
+    monkeypatch.setattr(callbacks, "refresh_group_poll", refresh)
+    context = cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace())
+
+    if mode == VotingMode.QUICK:
+        asyncio.run(callbacks._record_quick_score(
+            context, poll.id, "voter", 0, 4, cast(CallbackQuery, query)
+        ))
+        query.answer.assert_awaited_once_with("This poll is closed.", show_alert=True)
+        private_message.assert_not_awaited()
+    else:
+        asyncio.run(callbacks._record_score(context, poll.id, "voter", 42, 0, 4))
+        private_message.assert_awaited_once_with(context, 42, "This poll is closed.")
+    get_scores.assert_not_awaited()
+    refresh.assert_not_awaited()
+
+
 def _make_poll(*, voting_mode: VotingMode) -> Poll:
     return Poll(
         id=uuid4(),
@@ -840,6 +875,8 @@ def test_refresh_uses_one_saved_snapshot_for_both_results(monkeypatch, mode, vis
     list_scores = AsyncMock(return_value=rows)
     edit_message = AsyncMock()
     monkeypatch.setattr(callbacks, '_db', lambda context: db)
+    monkeypatch.setattr(callbacks.polls, 'message_refresh_lock', lambda db, poll_id: nullcontext())
+    monkeypatch.setattr(callbacks.polls, 'get_poll', AsyncMock(return_value=poll))
     monkeypatch.setattr(callbacks.ballots, 'list_ballot_scores', list_scores)
     context = SimpleNamespace(bot=SimpleNamespace(edit_message_text=edit_message))
     asyncio.run(callbacks.refresh_group_poll(cast(ContextTypes.DEFAULT_TYPE, context), poll, options))

@@ -72,8 +72,23 @@ PostgreSQL container
 Pairwise tally takes `O(V * N²)` time and `O(N²)` pairwise storage for V complete
 ballots and N options. At the ten-option limit there are 45 pairs per voter.
 Results are recomputed on refresh without another query, cache, new dependency,
-or migration. The stored method remains `score`. This change does not alter the
-existing close-versus-score-write race.
+or migration. The stored method remains `score`.
+
+Score writes lock the poll row and recheck its status in the same transaction
+as the ballot upsert. Closing a poll updates that same row, so a score that
+acquires the lock first commits before closure; if closure wins, the write is
+rejected in both DM and quick modes. Closed ballots cannot be inserted or edited
+through the ballot repository.
+
+Group-message refreshes use a per-poll PostgreSQL transaction advisory lock,
+held through the Telegram edit, to serialize updates across bot instances.
+Each refresh reloads the poll after acquiring the lock, so an old handler cannot
+restore open-poll text or buttons after the final closed refresh. The lock uses
+a short-lived separate connection, leaving the main database connection available
+during Telegram requests. This adds a connection and a poll-state query per
+refresh, without schema changes. Telegram failures still propagate (apart from
+the existing harmless "message is not modified" response); delivery retries and
+recovery after a process crash are outside this guarantee.
 
 ### Native date polls
 

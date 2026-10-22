@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -13,6 +14,20 @@ from voting_bot.models import (
     VotingMethodOptions,
     VotingMode,
 )
+
+
+@asynccontextmanager
+async def message_refresh_lock(db: Database, poll_id: UUID) -> AsyncIterator[None]:
+    """Serialize message refreshes across processes, including the Telegram edit."""
+    async with db.independent_connection() as connection:
+        async with connection.transaction():
+            # Keep this lock on a separate connection: refresh reads still need
+            # the main connection, and Telegram requests must not block it.
+            await connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"poll-message:{poll_id}",),
+            )
+            yield
 
 
 async def create_score_poll(

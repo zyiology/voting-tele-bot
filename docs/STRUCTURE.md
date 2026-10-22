@@ -43,12 +43,12 @@ voting-tele-bot/
 │       ├── main.py             # Entry point; builds Application, registers handlers
 │       ├── config.py           # Loads and validates env vars
 │       ├── database_url.py     # Normalizes Postgres URLs for SQLAlchemy and psycopg
-│       ├── db.py               # Connection pool; migration runner
+│       ├── db.py               # Serialized async connection, transactions, isolated connections
 │       ├── hashing.py          # HMAC voter ID helper
 │       ├── models.py           # Dataclasses / typed dicts for Poll, Option, Ballot, visibility settings
 │       ├── repositories/
-│       │   ├── polls.py        # Poll and option CRUD
-│       │   └── ballots.py      # Ballot upsert; session management
+│       │   ├── polls.py        # Poll and option CRUD; cross-instance message refresh lock
+│       │   └── ballots.py      # Open-poll guarded ballot upsert; session management
 │       ├── voting_methods/
 │       │   ├── __init__.py
 │       │   ├── base.py         # VotingMethod abstract base class
@@ -80,6 +80,15 @@ voting-tele-bot/
 
 ## Implementation Progress
 
+- Close-versus-score-write race fixed on 2026-10-22: ballot writes lock and
+  recheck the poll row in one transaction, so closure rejects subsequent inserts
+  and edits in both DM and quick modes. Group refreshes acquire a per-poll
+  PostgreSQL advisory lock through the Telegram edit and reload current poll
+  state; stale handlers cannot overwrite the final closed message. Refreshes
+  use a short-lived separate connection, with no schema or dependency changes.
+  Verification: lint and type checks passed; all 235 tests passed against a
+  temporary PostgreSQL instance, including both close/write orderings, delayed
+  refreshes across connections, and lock release on failure or cancellation.
 - Quick voting UX plan recorded on 2026-10-22 in
   [plans/quick-voting-ux-plan.md](plans/quick-voting-ux-plan.md): adds a
   `[My ballot]` modal alert button (`show_alert=True`), concise group-message

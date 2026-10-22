@@ -13,6 +13,7 @@ Voting logic lives in `voting_methods/` with no Telegram dependencies, so the co
 | `tests/test_hashing.py` | HMAC stability, secret rotation behavior |
 | `tests/test_rendering.py` | Poll message text and keyboard structure |
 | `tests/test_handlers.py` | Command parsing, date generation, Telegram handler behavior, callbacks, handler registration |
+| `tests/test_repositories.py` | PostgreSQL CRUD, closed-poll write rejection, close/write ordering, message refresh serialization and lock cleanup |
 
 ## Key Cases
 
@@ -117,3 +118,12 @@ Either way:
 - Per-test isolation is best done by wrapping each test in a transaction that rolls back, rather than truncating tables.
 - Set `DATABASE_URL` in the test env so `alembic/env.py` picks it up unchanged.
 e.g. `DATABASE_URL=postgresql://voting_bot:voting_bot@localhost:5432/voting_bot uv run pytest tests/test_repositories.py -v`
+
+Concurrency regressions use separate database connections and observe PostgreSQL
+lock waits before releasing blocked operations, rather than assuming ordering
+from timed sleeps. They verify both close/write orderings, rejection of inserts
+and edits after closure, delayed Telegram edits followed by closed refreshes,
+refreshes with stale poll objects, and advisory lock release after errors or
+cancellation. Telegram edits are faked; database operations use real PostgreSQL.
+Handler tests cover the closed-poll response when a poll closes between the
+initial status check and the score write in both voting modes.

@@ -149,19 +149,27 @@ async def refresh_group_poll(
         return
 
     db = _db(context)
-    poll_options = options if options is not None else await polls.list_poll_options(db, poll.id)
-    all_scores = await ballots.list_ballot_scores(db, poll.id)
-    text, keyboard = render_group_poll(poll, poll_options, all_scores)
-    try:
-        await context.bot.edit_message_text(
-            chat_id=poll.chat_id,
-            message_id=poll.message_id,
-            text=text,
-            reply_markup=keyboard,
+    async with polls.message_refresh_lock(db, poll.id):
+        # A handler may have loaded an OPEN poll before another handler closed
+        # it. Reload only after earlier message edits have finished.
+        current_poll = await polls.get_poll(db, poll.id)
+        if current_poll is None or current_poll.message_id is None:
+            return
+        poll_options = (
+            options if options is not None else await polls.list_poll_options(db, poll.id)
         )
-    except BadRequest as exc:
-        if "message is not modified" not in str(exc).lower():
-            raise
+        all_scores = await ballots.list_ballot_scores(db, poll.id)
+        text, keyboard = render_group_poll(current_poll, poll_options, all_scores)
+        try:
+            await context.bot.edit_message_text(
+                chat_id=current_poll.chat_id,
+                message_id=current_poll.message_id,
+                text=text,
+                reply_markup=keyboard,
+            )
+        except BadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
 
 
 async def _start_or_resume_vote(
@@ -231,13 +239,17 @@ async def _record_score(
         )
         return
 
-    await ballots.upsert_score(
-        _db(context),
-        poll_id=poll.id,
-        voter_hash=voter_hash,
-        option_id=option.id,
-        score=score,
-    )
+    try:
+        await ballots.upsert_score(
+            _db(context),
+            poll_id=poll.id,
+            voter_hash=voter_hash,
+            option_id=option.id,
+            score=score,
+        )
+    except ballots.PollNotOpenError:
+        await _send_private_message(context, user_id, "This poll is closed.")
+        return
 
     voter_scores = await ballots.get_voter_scores(
         _db(context),
@@ -299,13 +311,17 @@ async def _record_quick_score(
         await query.answer("That score is outside this poll's range.", show_alert=True)
         return
 
-    await ballots.upsert_score(
-        _db(context),
-        poll_id=poll.id,
-        voter_hash=voter_hash,
-        option_id=option.id,
-        score=score,
-    )
+    try:
+        await ballots.upsert_score(
+            _db(context),
+            poll_id=poll.id,
+            voter_hash=voter_hash,
+            option_id=option.id,
+            score=score,
+        )
+    except ballots.PollNotOpenError:
+        await query.answer("This poll is closed.", show_alert=True)
+        return
     voter_scores = await ballots.get_voter_scores(
         _db(context),
         poll_id=poll.id,

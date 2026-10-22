@@ -44,6 +44,20 @@ class Database:
         self._connection = None
 
     @asynccontextmanager
+    async def independent_connection(self) -> AsyncIterator[AsyncConnection[Row]]:
+        """Open an isolated connection for work that must not hold the main lock."""
+        self._require_connection()
+        connection = cast(
+            AsyncConnection[Row],
+            await AsyncConnection.connect(
+                self._database_url,
+                row_factory=cast(Any, dict_row),
+            ),
+        )
+        async with connection:
+            yield connection
+
+    @asynccontextmanager
     async def cursor(self) -> AsyncIterator[AsyncCursor[Row]]:
         connection = self._require_connection()
         async with self._lock:

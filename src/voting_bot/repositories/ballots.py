@@ -4,7 +4,11 @@ from datetime import datetime
 from uuid import UUID
 
 from voting_bot.db import Database, Row
-from voting_bot.models import BallotScore, PollSession
+from voting_bot.models import BallotScore, PollSession, PollStatus
+
+
+class PollNotOpenError(ValueError):
+    """The poll was closed or removed before its score could be saved."""
 
 
 async def list_ballot_scores(db: Database, poll_id: UUID) -> list[BallotScore]:
@@ -47,18 +51,31 @@ async def upsert_score(
     option_id: UUID,
     score: int,
 ) -> BallotScore:
-    row = await db.fetch_one(
-        """
-        INSERT INTO ballots (poll_id, voter_hash, option_id, score)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (poll_id, voter_hash, option_id)
-        DO UPDATE SET
-            score = EXCLUDED.score,
-            updated_at = now()
-        RETURNING *
-        """,
-        (poll_id, voter_hash, option_id, score),
-    )
+    async with db.transaction() as connection:
+        async with connection.cursor() as cursor:
+            # close_poll's UPDATE takes the same row lock. Whichever operation
+            # gets it first completes before the other can check or change state.
+            await cursor.execute(
+                "SELECT status FROM polls WHERE id = %s FOR UPDATE",
+                (poll_id,),
+            )
+            poll_row = await cursor.fetchone()
+            if poll_row is None or poll_row["status"] != PollStatus.OPEN.value:
+                raise PollNotOpenError("This poll is closed.")
+
+            await cursor.execute(
+                """
+                INSERT INTO ballots (poll_id, voter_hash, option_id, score)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (poll_id, voter_hash, option_id)
+                DO UPDATE SET
+                    score = EXCLUDED.score,
+                    updated_at = now()
+                RETURNING *
+                """,
+                (poll_id, voter_hash, option_id, score),
+            )
+            row = await cursor.fetchone()
     if row is None:
         raise RuntimeError("failed to upsert ballot score")
 
