@@ -23,6 +23,13 @@ SCORE_RESULTS_EXPLANATION = (
     "Scores determine both results. Higher scores express pairwise preference; "
     "equal scores mean no preference."
 )
+QUICK_VOTING_INSTRUCTIONS = (
+    "Tap one score per option row (# matches Options). "
+    "Score every option for your ballot to count.\n"
+    "Tap another number in a row to update its score. "
+    "Individual scores are not posted to the group.\n"
+    "Tap My ballot to review your saved scores privately."
+)
 
 
 def vote_callback_data(poll_id: UUID) -> str:
@@ -35,6 +42,10 @@ def score_callback_data(poll_id: UUID, option_order: int, score: int) -> str:
 
 def quick_score_callback_data(poll_id: UUID, option_order: int, score: int) -> str:
     return f"q:{poll_id}:{option_order}:{score}"
+
+
+def my_ballot_callback_data(poll_id: UUID) -> str:
+    return f"b:{poll_id}"
 
 
 def edit_callback_data(poll_id: UUID) -> str:
@@ -56,20 +67,27 @@ def render_group_poll(
 
     if poll.status == PollStatus.OPEN:
         lines.extend([SCORE_RESULTS_EXPLANATION, ""])
+        if poll.voting_mode == VotingMode.QUICK:
+            lines.extend([QUICK_VOTING_INSTRUCTIONS, ""])
+
+    if (
+        (poll.status == PollStatus.OPEN and poll.voting_mode == VotingMode.QUICK)
+        or result.complete_ballot_count == 0
+        or _should_hide_results(poll)
+    ):
+        lines.extend(_option_lines(options))
+        lines.append("")
 
     if result.complete_ballot_count == 0:
-        lines.extend(_option_lines(options))
-        lines.extend(["", "Votes cast: 0"])
+        lines.append("Votes cast: 0")
         lines.append(
             "No complete ballots were cast."
             if poll.status == PollStatus.CLOSED
             else "No complete ballots yet."
         )
     elif _should_hide_results(poll):
-        lines.extend(_option_lines(options))
         lines.extend(
             [
-                "",
                 f"Votes cast: {result.complete_ballot_count}",
                 "",
                 "Results hidden until the poll closes.",
@@ -149,6 +167,29 @@ def render_ballot_summary(
     return "\n".join(lines), keyboard
 
 
+def render_quick_ballot_review(
+    options: Sequence[PollOption],
+    voter_scores: Sequence[BallotScore],
+) -> str:
+    score_by_option = {score.option_id: score.score for score in voter_scores}
+    lines = ["Your ballot (# matches Options):"]
+    scored_count = 0
+    for option in sorted(options, key=lambda option: option.display_order):
+        if option.id in score_by_option:
+            value = str(score_by_option[option.id])
+            scored_count += 1
+        else:
+            value = "not scored"
+        lines.append(f"#{option.display_order + 1}: {value}")
+    lines.extend([
+        "",
+        "Ballot complete. Your vote counts."
+        if scored_count == len(options)
+        else f"{scored_count}/{len(options)} scored. Score every option to count.",
+    ])
+    return "\n".join(lines)
+
+
 def _poll_title(poll: Poll) -> str:
     if poll.status == PollStatus.CLOSED:
         return f"{poll.title} [CLOSED]"
@@ -216,7 +257,7 @@ def _group_keyboard(
         buttons = [
             InlineKeyboardButton(
                 (
-                    f"{option.display_order + 1}. {option.label}: {score}"
+                    f"#{option.display_order + 1}: {score}"
                     if score == poll.score_min
                     else str(score)
                 ),
@@ -230,6 +271,9 @@ def _group_keyboard(
         ]
         rows.extend(_chunk_buttons(buttons, size=6))
 
+    rows.append([
+        InlineKeyboardButton("My ballot", callback_data=my_ballot_callback_data(poll.id))
+    ])
     return InlineKeyboardMarkup(rows)
 
 

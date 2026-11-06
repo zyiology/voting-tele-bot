@@ -35,7 +35,7 @@ voting-tele-bot/
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
 │       ├── no-dm-plan.md
-│       ├── quick-voting-ux-plan.md  # Detailed quick UX plan with numbered private review
+│       ├── quick-voting-ux-plan.md  # Quick UX implementation and verification plan
 │       └── webhooks-caddy-plan.md
 ├── src/
 │   └── voting_bot/
@@ -100,11 +100,22 @@ voting-tele-bot/
   after [plans/condorcet-from-scores-plan.md](plans/condorcet-from-scores-plan.md).
   Reviewed on 2026-10-23 after the Condorcet implementation: rendering and
   callback details, verification, and rollout are specified for all five points,
-  pending user review before code changes. The user accepted a compact numbered
+  subsequently approved for implementation on 2026-11-06. The user accepted a compact numbered
   private summary to fit callback alerts' 200-character limit; point 1 now
   specifies a read-only `b:<poll_id>` callback, completion states, and validation.
-  The alert itself is not a saved message. No application or test changes were
-  made in this review.
+  The alert itself is not a saved message. Implemented on 2026-11-06: open quick
+  polls include instructions, a persistent original-order legend, compact score
+  buttons, and a bottom-row My ballot button. Review reads only the clicking
+  voter's saved scores and returns an uncached numbered alert; partial score
+  taps skip shared refreshes, while every completed-ballot tap remains eligible.
+  Guarded writes and serialized refreshes are unchanged. Lint and type checks
+  pass; the existing suite has 217 passes, 16 database skips, and two assertions
+  requiring updates for the intended label and partial-refresh changes. Test
+  and additional documentation edits await approval under AGENTS.md.
+  Direct rendering checks cover 243 five-option score states (maximum alert
+  length 149/200 UTF-16 units) and a maximum quick poll with repeated Unicode
+  labels and tied winners (3346/4096 UTF-16 units). Live Telegram checks remain
+  necessary before rollout.
 - Condorcet plan proposed on 2026-10-21: the
   [implementation plan](plans/condorcet-from-scores-plan.md) derives pairwise preferences from
   existing score ballots and announces score and Condorcet winners separately,

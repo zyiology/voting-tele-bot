@@ -14,6 +14,7 @@ from voting_bot.models import BallotScore, Poll, PollOption, PollStatus, VotingM
 from voting_bot.rendering import (
     render_ballot_summary,
     render_group_poll,
+    render_quick_ballot_review,
     render_score_prompt,
 )
 from voting_bot.repositories import ballots, polls
@@ -92,6 +93,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
+    if action.kind == "b":
+        await _show_quick_ballot(context, action.poll_id, voter_hash, query)
+        return
+
     if action.kind == "e":
         try:
             await _restart_vote(context, action.poll_id, voter_hash, user.id)
@@ -117,7 +122,7 @@ def parse_callback_data(data: str) -> CallbackAction:
         raise CallbackDataError("missing callback fields")
 
     kind = parts[0]
-    if kind not in {"v", "s", "q", "e", "d"}:
+    if kind not in {"v", "s", "q", "b", "e", "d"}:
         raise CallbackDataError("unknown callback kind")
 
     try:
@@ -327,14 +332,51 @@ async def _record_quick_score(
         poll_id=poll.id,
         voter_hash=voter_hash,
     )
-    scored_count = len({voter_score.option_id for voter_score in voter_scores})
-    if scored_count == len(options):
+    option_ids = {option.id for option in options}
+    scored_count = len(
+        {voter_score.option_id for voter_score in voter_scores} & option_ids
+    )
+    is_complete = scored_count == len(options)
+    if is_complete:
         message = f"Ballot complete. Saved {option.label}: {score}."
     else:
         message = f"Saved {option.label}: {score}. {scored_count}/{len(options)} scored."
 
     await query.answer(message)
-    await refresh_group_poll(context, poll, options)
+    if is_complete:
+        await refresh_group_poll(context, poll, options)
+
+
+async def _show_quick_ballot(
+    context: ContextTypes.DEFAULT_TYPE,
+    poll_id: UUID,
+    voter_hash: str,
+    query: CallbackQuery,
+) -> None:
+    poll_with_options = await polls.get_poll_with_options(_db(context), poll_id)
+    if poll_with_options is None:
+        await query.answer("This poll no longer exists.", show_alert=True)
+        return
+
+    poll, options = poll_with_options
+    if poll.status != PollStatus.OPEN:
+        await query.answer("This poll is closed.", show_alert=True)
+        return
+    if poll.voting_mode != VotingMode.QUICK:
+        await query.answer("This button is no longer valid.", show_alert=True)
+        return
+    if not options:
+        await query.answer("This poll has no options.", show_alert=True)
+        return
+
+    voter_scores = await ballots.get_voter_scores(
+        _db(context), poll_id=poll.id, voter_hash=voter_hash
+    )
+    await query.answer(
+        render_quick_ballot_review(options, voter_scores),
+        show_alert=True,
+        cache_time=0,
+    )
 
 
 async def _send_score_prompt(
