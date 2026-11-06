@@ -119,10 +119,23 @@ Postgres is reachable only on the internal compose network. Logs:
 podman compose logs -f bot
 ```
 
-To apply new migrations after pulling code, rebuild the image, run
-migrations explicitly, and restart the bot:
+For an existing VM deployment, when the incoming update has no new or
+changed migrations in `alembic/versions/`, pull the code and rebuild and
+recreate the bot container:
+
+```sh
+git pull --ff-only
+podman compose -f compose.yaml -f compose.prod.yaml up -d --build bot
+```
+
+This skips the migration step; the existing database volume is retained.
+Use `docker` instead of `podman` if the VM runs Docker Compose.
+
+When the update includes new migrations, pull the code, rebuild the image,
+run migrations explicitly, and recreate the bot container:
 
 ```
+git pull --ff-only
 podman compose -f compose.yaml -f compose.prod.yaml build bot
 podman compose -f compose.yaml -f compose.prod.yaml run --rm bot uv run --no-sync alembic upgrade head
 podman compose -f compose.yaml -f compose.prod.yaml up -d bot
