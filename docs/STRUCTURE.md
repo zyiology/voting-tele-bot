@@ -35,7 +35,7 @@ voting-tele-bot/
 │       ├── init-plan.md
 │       ├── native-date-poll-plan.md # Telegram-native date availability poll plan
 │       ├── no-dm-plan.md
-│       ├── quick-voting-ux-plan.md  # Proposed UX improvements for --quick polls
+│       ├── quick-voting-ux-plan.md  # Detailed quick UX plan with numbered private review
 │       └── webhooks-caddy-plan.md
 ├── src/
 │   └── voting_bot/
@@ -80,6 +80,9 @@ voting-tele-bot/
 
 ## Implementation Progress
 
+- README VM update instructions clarified on 2026-11-06: updates without
+  migration changes use `git pull --ff-only` followed by Compose
+  `up -d --build bot`; updates with migrations retain the explicit Alembic step.
 - Close-versus-score-write race fixed on 2026-10-22: ballot writes lock and
   recheck the poll row in one transaction, so closure rejects subsequent inserts
   and edits in both DM and quick modes. Group refreshes acquire a per-poll
@@ -95,6 +98,13 @@ voting-tele-bot/
   voting instructions, `#N: 0` score button prefixes with a persistent option
   legend, and skips redundant group message edits on partial taps. Scheduled
   after [plans/condorcet-from-scores-plan.md](plans/condorcet-from-scores-plan.md).
+  Reviewed on 2026-10-23 after the Condorcet implementation: rendering and
+  callback details, verification, and rollout are specified for all five points,
+  pending user review before code changes. The user accepted a compact numbered
+  private summary to fit callback alerts' 200-character limit; point 1 now
+  specifies a read-only `b:<poll_id>` callback, completion states, and validation.
+  The alert itself is not a saved message. No application or test changes were
+  made in this review.
 - Condorcet plan proposed on 2026-10-21: the
   [implementation plan](plans/condorcet-from-scores-plan.md) derives pairwise preferences from
   existing score ballots and announces score and Condorcet winners separately,
