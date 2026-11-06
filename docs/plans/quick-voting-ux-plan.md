@@ -2,11 +2,11 @@
 
 ## Status
 
-Reviewed against the current implementation on 23 October 2026. The prerequisite
-Condorcet changes are implemented. The user accepted a numbered private ballot
-summary on 23 October 2026. All five points now have implementation details below,
-pending user review before code changes. No application code or tests have been
-changed as part of this review.
+Implemented on 6 November 2026 after user approval, including the numbered
+private ballot summary accepted on 23 October 2026. All five changes below are
+implemented. The user separately approved regression tests and documentation
+updates. Lint and type checks pass; 260 tests pass and 16 database tests skip
+without a configured test database. Manual Telegram client checks remain pending.
 
 ## Planned Behaviour Changes
 

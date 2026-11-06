@@ -95,8 +95,12 @@ Telegram inline button callback data is size-limited. Use compact payloads:
 v:<poll_id>
 s:<poll_id>:<option_order>:<score>
 q:<poll_id>:<option_order>:<score>
+b:<poll_id>
 d:<poll_id>
 e:<poll_id>
 ```
 
-If UUID length causes issues, fall back to short numeric IDs or a token lookup table.
+`b:<poll_id>` opens the read-only private quick-ballot review. The handler derives
+the voter hash from the clicking Telegram user; the payload contains no voter
+identity. Score callbacks use zero-based original option orders. These UUID
+payloads fit Telegram's 64-byte callback limit.

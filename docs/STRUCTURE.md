@@ -109,9 +109,10 @@ voting-tele-bot/
   voter's saved scores and returns an uncached numbered alert; partial score
   taps skip shared refreshes, while every completed-ballot tap remains eligible.
   Guarded writes and serialized refreshes are unchanged. Lint and type checks
-  pass; the existing suite has 217 passes, 16 database skips, and two assertions
-  requiring updates for the intended label and partial-refresh changes. Test
-  and additional documentation edits await approval under AGENTS.md.
+  pass; the updated suite has 260 passes and 16 database skips without a
+  configured test database. Approved regression tests cover review privacy,
+  fresh reads, validation, rendering budgets, and refresh eligibility/order.
+  DESIGN, TESTING, and DATABASE now document the quick flow and review callback.
   Direct rendering checks cover 243 five-option score states (maximum alert
   length 149/200 UTF-16 units) and a maximum quick poll with repeated Unicode
   labels and tied winners (3346/4096 UTF-16 units). Live Telegram checks remain

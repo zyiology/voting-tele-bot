@@ -95,7 +95,9 @@ Every open group message, including initial creation, hidden results, and quick
 mode, explains: “Scores determine both results. Higher scores express pairwise
 preference; equal scores mean no preference.” This explanation appears above the
 option list or results. The message is updated in-place as scores change.
-Individual ballots are not posted.
+Individual ballots are not posted. Quick polls save every score immediately but
+refresh the group message only when the tapping voter's ballot is complete,
+including every subsequent edit or repeated tap. Closing always refreshes.
 
 ## Voting Flow (private DM)
 
@@ -129,6 +131,10 @@ Where should we eat?
 
 Scores determine both results. Higher scores express pairwise preference; equal scores mean no preference.
 
+Tap one score per option row (# matches Options). Score every option for your ballot to count.
+Tap another number in a row to update its score. Individual scores are not posted to the group.
+Tap My ballot to review your saved scores privately.
+
 Options:
 1. Sushi
 2. Pizza
@@ -137,14 +143,38 @@ Options:
 Votes cast: 0
 No complete ballots yet.
 
-[1. Sushi: 0] [1] [2] [3] [4] [5]
-[2. Pizza: 0] [1] [2] [3] [4] [5]
-[3. Thai: 0]  [1] [2] [3] [4] [5]
+[#1: 0] [1] [2] [3] [4] [5]
+[#2: 0] [1] [2] [3] [4] [5]
+[#3: 0] [1] [2] [3] [4] [5]
+[My ballot]
 ```
 
 Each tap records or updates that user's score for the option. Telegram callback notifications give private progress feedback, for example `Saved Pizza: 4. 2/3 scored.` Once every option has a score, the ballot is complete and included in the vote count and, after results are visible, aggregate results.
 
-Quick mode does not mark selected buttons in the shared group message, because any keyboard edit would be visible to the entire group. Use DM mode when users need a private per-option review flow.
+Quick mode does not mark selected buttons in the shared group message, because
+any keyboard edit would be visible to the entire group. The first button in each
+row records the minimum score; it is not a saved-score indicator. Row numbers
+always refer to the persistent original-order `Options:` legend, even when live
+results rank the options differently.
+
+Tapping `[My ballot]` fetches only that voter's saved scores and shows a private
+alert, without requiring a private chat with the bot:
+
+```
+Your ballot (# matches Options):
+#1: 4
+#2: not scored
+#3: 0
+
+2/3 scored. Score every option to count.
+```
+
+An empty ballot lists every option as `not scored` and ends with `0/3 scored.
+Score every option to count.` A complete ballot ends with `Ballot complete. Your
+vote counts.` Zero is a saved score. Numbers disambiguate duplicate labels, and
+the five-option summary fits Telegram's 200-character alert limit. The alert is
+not a saved chat message; tapping again fetches the saved ballot anew. Closing
+removes all quick buttons; stale review taps receive `This poll is closed.`
 
 ## Results Display
 
@@ -192,6 +222,34 @@ Only **complete ballots** (every option scored) count toward either result.
 The example shows that highest average and head-to-head winner can differ; the
 bot announces both without choosing between them. Live summaries are provisional.
 Both summaries and averages are hidden for open hidden-results polls.
+
+For `--quick --live-results`, the instructions and original-order legend remain
+above the vote count, alongside the ranked results and score keyboard. For
+example, after scoring Sushi=2 and Pizza=5:
+
+```
+Options:
+1. Sushi
+2. Pizza
+
+Votes cast: 1
+
+Current results:
+1. Pizza - avg 5.0
+2. Sushi - avg 2.0
+Provisional results; scores can still change.
+
+Score winner: Pizza
+Condorcet winner (from scores): Pizza
+
+[#1: 0] [1] [2] [3] [4] [5]
+[#2: 0] [1] [2] [3] [4] [5]
+[My ballot]
+```
+
+The title, results explanation, and quick instructions precede this excerpt.
+`#1` continues to mean Sushi even though Pizza ranks first. Small live aggregates
+can reveal preferences, as described in [Security & Privacy](SECURITY.md).
 
 After closing:
 

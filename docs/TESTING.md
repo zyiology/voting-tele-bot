@@ -77,6 +77,31 @@ and mocked Telegram refresh checks do not replace this live check.
 - Results ranked correctly in rendered text
 - Zero-vote state renders without errors
 
+### Quick voting (`test_rendering.py`, `test_handlers.py`)
+
+- Hidden/live results with zero, partial, and complete ballots retain exactly
+  one original-order option legend; ranked results do not change row identities
+- Instructions and the sole bottom-row My ballot button appear only on open
+  quick polls; compact labels preserve minimum-score callbacks and smaller ranges
+- Five-option Unicode legends, duplicate labels, and tied winner summaries fit
+  the 4096 UTF-16-unit message budget
+- Empty, partial, complete, and zero-valued review summaries use original option
+  numbers, omit labels, ignore unknown score IDs, and fit the 200-character alert
+- Strict `b:<poll_id>` parsing, clicking-user identity, fresh repeated reads,
+  exactly one uncached alert per review, and no writes, aggregate reads, DM sends,
+  or group refreshes; missing/closed/wrong-mode/empty polls return alerts
+- First and repeated partial taps save and answer without refreshing; completion,
+  complete-ballot edits, and identical complete taps refresh after private feedback
+- Invalid options/ranges and missing/closed polls do not write or refresh;
+  existing close-during-save regressions remain covered in both voting modes
+
+Before rollout, manually check Telegram mobile layouts with six score buttons,
+long labels, hidden/live results, completion, edits, and closure. From two voter
+accounts, review empty, partial, and complete ballots (including zero); verify
+each sees only their own scores without private-chat setup, can reopen the alert,
+and receives a closed-poll alert from a stale button. Automated tests cannot
+verify Telegram client truncation or alert presentation.
+
 ### Native date polls (`test_handlers.py`)
 
 - Strict, locale-independent English date parsing, including leap days
