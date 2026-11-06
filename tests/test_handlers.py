@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from contextlib import nullcontext
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -31,6 +32,7 @@ from voting_bot.handlers.commands import (
     poll_dates,
 )
 from voting_bot.main import register_handlers
+from voting_bot.hashing import hash_voter_id
 from voting_bot.models import (
     BallotScore,
     Poll,
@@ -43,6 +45,7 @@ from voting_bot.models import (
 from voting_bot.rendering import (
     done_callback_data,
     edit_callback_data,
+    my_ballot_callback_data,
     quick_score_callback_data,
     score_callback_data,
     vote_callback_data,
@@ -725,7 +728,7 @@ def test_record_quick_score_saves_score_and_reports_progress(monkeypatch: pytest
         score=4,
     )
     query.answer.assert_awaited_once_with("Saved Sushi: 4. 1/2 scored.")
-    refresh.assert_awaited_once_with(context, poll, options)
+    refresh.assert_not_awaited()
 
 
 def test_record_quick_score_reports_complete_ballot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -751,7 +754,8 @@ def test_record_quick_score_reports_complete_ballot(monkeypatch: pytest.MonkeyPa
             ]
         ),
     )
-    monkeypatch.setattr(callbacks, "refresh_group_poll", AsyncMock())
+    refresh = AsyncMock()
+    monkeypatch.setattr(callbacks, "refresh_group_poll", refresh)
 
     asyncio.run(
         _record_quick_score(
@@ -765,6 +769,7 @@ def test_record_quick_score_reports_complete_ballot(monkeypatch: pytest.MonkeyPa
     )
 
     query.answer.assert_awaited_once_with("Ballot complete. Saved Pizza: 5.")
+    refresh.assert_awaited_once()
 
 
 def test_record_quick_score_rejects_dm_poll(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -892,3 +897,156 @@ def test_refresh_uses_one_saved_snapshot_for_both_results(monkeypatch, mode, vis
         assert 'Score winner: Pizza' in text
         assert 'Condorcet winner (from scores): Sushi' in text
     assert (args['reply_markup'] is None) == (status == PollStatus.CLOSED)
+
+
+def test_review_callback_round_trip_and_payload_limit():
+    poll_id = uuid4()
+    payload = my_ballot_callback_data(poll_id)
+    action = parse_callback_data(payload)
+    assert action == callbacks.CallbackAction('b', poll_id)
+    assert len(payload.encode()) <= 64
+
+
+@pytest.mark.parametrize('payload', [
+    'b', 'b:', 'b:not-a-uuid', f'b:{uuid4()}:extra', f'b:{uuid4()}:0:5',
+])
+def test_review_callback_rejects_malformed_payloads(payload):
+    with pytest.raises(CallbackDataError):
+        parse_callback_data(payload)
+
+
+def test_review_dispatch_uses_clicking_user_and_fresh_private_scores(monkeypatch):
+    poll = _make_poll(voting_mode=VotingMode.QUICK)
+    options = _make_options(poll.id)
+    db = object()
+    secret = 'test-secret'
+    user_id = 42
+    voter_hash = hash_voter_id(user_id, secret)
+    query = SimpleNamespace(data=my_ballot_callback_data(poll.id), answer=AsyncMock())
+    context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=user_id))
+    get_scores = AsyncMock(side_effect=[[], [BallotScore(poll.id, voter_hash, options[0].id, 0)]])
+    monkeypatch.setattr(callbacks, '_db', lambda context: db)
+    monkeypatch.setattr(callbacks, '_config', lambda context: SimpleNamespace(voter_hash_secret=secret))
+    monkeypatch.setattr(callbacks.polls, 'get_poll_with_options', AsyncMock(return_value=(poll, options)))
+    monkeypatch.setattr(callbacks.ballots, 'get_voter_scores', get_scores)
+    forbidden = [
+        (callbacks.ballots, 'upsert_score'), (callbacks.ballots, 'upsert_session'),
+        (callbacks.ballots, 'clear_session'), (callbacks.ballots, 'list_ballot_scores'),
+        (callbacks, 'refresh_group_poll'),
+    ]
+    spies = []
+    for module, name in forbidden:
+        spy = AsyncMock()
+        monkeypatch.setattr(module, name, spy)
+        spies.append(spy)
+    for expected in ['#1: not scored', '#1: 0']:
+        query.answer.reset_mock()
+        asyncio.run(callbacks.handle_callback(
+            cast(Update, update), cast(ContextTypes.DEFAULT_TYPE, context)
+        ))
+        query.answer.assert_awaited_once()
+        assert query.answer.await_args.kwargs == {'show_alert': True, 'cache_time': 0}
+        assert expected in query.answer.await_args.args[0]
+        assert '#2: not scored' in query.answer.await_args.args[0]
+        get_scores.assert_awaited_with(db, poll_id=poll.id, voter_hash=voter_hash)
+    assert get_scores.await_count == 2
+    context.bot.send_message.assert_not_awaited()
+    for spy in spies:
+        spy.assert_not_awaited()
+
+
+@pytest.mark.parametrize('state,message', [
+    ('missing', 'This poll no longer exists.'),
+    ('closed', 'This poll is closed.'),
+    ('dm', 'This button is no longer valid.'),
+    ('empty', 'This poll has no options.'),
+])
+def test_review_rejects_unavailable_polls_without_reading_scores(monkeypatch, state, message):
+    poll = _make_poll(voting_mode=VotingMode.DM if state == 'dm' else VotingMode.QUICK)
+    if state == 'closed':
+        poll = replace(poll, status=PollStatus.CLOSED)
+    options = [] if state == 'empty' else _make_options(poll.id)
+    query = SimpleNamespace(answer=AsyncMock())
+    get_scores = AsyncMock()
+    monkeypatch.setattr(callbacks, '_db', lambda context: object())
+    monkeypatch.setattr(callbacks.polls, 'get_poll_with_options',
+                        AsyncMock(return_value=None if state == 'missing' else (poll, options)))
+    monkeypatch.setattr(callbacks.ballots, 'get_voter_scores', get_scores)
+    asyncio.run(callbacks._show_quick_ballot(
+        cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()), poll.id, 'voter', cast(CallbackQuery, query)
+    ))
+    query.answer.assert_awaited_once_with(message, show_alert=True)
+    get_scores.assert_not_awaited()
+
+
+@pytest.mark.parametrize('visibility', list(ResultsVisibility))
+@pytest.mark.parametrize('complete', [False, True])
+def test_repeated_quick_taps_refresh_only_complete_ballots_after_feedback(monkeypatch, visibility, complete):
+    poll = replace(_make_poll(voting_mode=VotingMode.QUICK), results_visibility=visibility)
+    options = _make_options(poll.id)
+    events = []
+
+    async def save(*args, **kwargs):
+        events.append('save')
+
+    async def read(*args, **kwargs):
+        events.append('read')
+        rows = [BallotScore(poll.id, 'voter', options[0].id, 0)]
+        if complete:
+            rows.append(BallotScore(poll.id, 'voter', options[1].id, 0))
+        return rows + [rows[0], BallotScore(poll.id, 'voter', uuid4(), 5)]
+
+    async def answer(*args, **kwargs):
+        events.append('answer')
+
+    async def refresh(*args, **kwargs):
+        events.append('refresh')
+
+    query = SimpleNamespace(answer=AsyncMock(side_effect=answer))
+    refresh_mock = AsyncMock(side_effect=refresh)
+    monkeypatch.setattr(callbacks, '_db', lambda context: object())
+    monkeypatch.setattr(callbacks.polls, 'get_poll_with_options', AsyncMock(return_value=(poll, options)))
+    monkeypatch.setattr(callbacks.ballots, 'upsert_score', AsyncMock(side_effect=save))
+    monkeypatch.setattr(callbacks.ballots, 'get_voter_scores', AsyncMock(side_effect=read))
+    monkeypatch.setattr(callbacks, 'refresh_group_poll', refresh_mock)
+    context = cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace())
+    # Includes an identical tap and a changed score on an already complete ballot.
+    for score in [0, 0, 4]:
+        asyncio.run(callbacks._record_quick_score(
+            context, poll.id, 'voter', 0, score, cast(CallbackQuery, query)
+        ))
+        expected = (f'Ballot complete. Saved Sushi: {score}.' if complete
+                    else f'Saved Sushi: {score}. 1/2 scored.')
+        query.answer.assert_awaited_with(expected)
+    assert events == (['save', 'read', 'answer', 'refresh'] if complete
+                      else ['save', 'read', 'answer']) * 3
+    assert refresh_mock.await_count == (3 if complete else 0)
+
+
+@pytest.mark.parametrize('state,message', [
+    ('missing', 'This poll no longer exists.'),
+    ('closed', 'This poll is closed.'),
+    ('option', 'This button is no longer valid.'),
+    ('range', "That score is outside this poll's range."),
+])
+def test_quick_invalid_taps_do_not_save_or_refresh(monkeypatch, state, message):
+    poll = _make_poll(voting_mode=VotingMode.QUICK)
+    if state == 'closed':
+        poll = replace(poll, status=PollStatus.CLOSED)
+    options = _make_options(poll.id)
+    query = SimpleNamespace(answer=AsyncMock())
+    write, read, refresh = AsyncMock(), AsyncMock(), AsyncMock()
+    monkeypatch.setattr(callbacks, '_db', lambda context: object())
+    monkeypatch.setattr(callbacks.polls, 'get_poll_with_options',
+                        AsyncMock(return_value=None if state == 'missing' else (poll, options)))
+    monkeypatch.setattr(callbacks.ballots, 'upsert_score', write)
+    monkeypatch.setattr(callbacks.ballots, 'get_voter_scores', read)
+    monkeypatch.setattr(callbacks, 'refresh_group_poll', refresh)
+    asyncio.run(callbacks._record_quick_score(
+        cast(ContextTypes.DEFAULT_TYPE, SimpleNamespace()), poll.id, 'voter',
+        99 if state == 'option' else 0, 99 if state == 'range' else 0, cast(CallbackQuery, query)
+    ))
+    query.answer.assert_awaited_once_with(message, show_alert=True)
+    for spy in [write, read, refresh]:
+        spy.assert_not_awaited()

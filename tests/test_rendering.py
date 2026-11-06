@@ -17,12 +17,15 @@ from voting_bot.models import (
     VotingMode,
 )
 from voting_bot.rendering import (
+    QUICK_VOTING_INSTRUCTIONS,
     SCORE_RESULTS_EXPLANATION,
     done_callback_data,
     edit_callback_data,
+    my_ballot_callback_data,
     quick_score_callback_data,
     render_ballot_summary,
     render_group_poll,
+    render_quick_ballot_review,
     render_score_prompt,
     score_callback_data,
     vote_callback_data,
@@ -99,13 +102,13 @@ def test_render_group_poll_quick_mode_shows_score_buttons() -> None:
     assert "Where should we eat?" in text
     assert "Votes cast: 0" in text
     assert keyboard is not None
-    assert keyboard.inline_keyboard[0][0].text == "1. Sushi: 0"
+    assert keyboard.inline_keyboard[0][0].text == "#1: 0"
     assert keyboard.inline_keyboard[0][0].callback_data == quick_score_callback_data(
         poll.id,
         0,
         0,
     )
-    assert keyboard.inline_keyboard[1][0].text == "2. Pizza: 0"
+    assert keyboard.inline_keyboard[1][0].text == "#2: 0"
     assert keyboard.inline_keyboard[1][5].callback_data == quick_score_callback_data(
         poll.id,
         1,
@@ -314,3 +317,95 @@ def test_maximum_unicode_messages_fit_telegram_budget(status, tied):
         summary = text.split('Score winners (tied): ')[1].splitlines()[0]
         for i in range(MAX_OPTIONS):
             assert f'{i + 1}. ' in summary
+
+
+@pytest.mark.parametrize('visibility', list(ResultsVisibility))
+@pytest.mark.parametrize('scored_count', [0, 1, 2])
+def test_quick_legend_and_instructions_remain_with_ranked_results(visibility, scored_count):
+    poll = make_poll(voting_mode=VotingMode.QUICK, results_visibility=visibility)
+    options = make_options(poll.id)
+    scores = [make_score(poll.id, 'a', option.id, value)
+              for option, value in zip(options, [0, 5])][:scored_count]
+    text, keyboard = render_group_poll(poll, options, scores)
+    assert QUICK_VOTING_INSTRUCTIONS in text
+    assert text.count('Options:') == 1
+    assert 'Options:\n1. Sushi\n2. Pizza\n\nVotes cast:' in text
+    assert keyboard is not None
+    assert len(keyboard.inline_keyboard[-1]) == 1
+    assert keyboard.inline_keyboard[-1][0].text == 'My ballot'
+    assert keyboard.inline_keyboard[-1][0].callback_data == my_ballot_callback_data(poll.id)
+    if scored_count == 2 and visibility == ResultsVisibility.LIVE:
+        assert 'Current results:\n1. Pizza - avg 5.0\n2. Sushi - avg 0.0' in text
+        assert 'Score winner: Pizza' in text
+        assert 'Condorcet winner (from scores): Pizza' in text
+    else:
+        assert 'avg ' not in text
+        assert 'winner' not in text
+
+
+@pytest.mark.parametrize('mode,status', [
+    (VotingMode.DM, PollStatus.OPEN),
+    (VotingMode.DM, PollStatus.CLOSED),
+    (VotingMode.QUICK, PollStatus.CLOSED),
+])
+def test_quick_controls_and_instructions_are_only_for_open_quick_polls(mode, status):
+    poll = make_poll(voting_mode=mode, status=status)
+    text, keyboard = render_group_poll(poll, make_options(poll.id), [])
+    assert QUICK_VOTING_INSTRUCTIONS not in text
+    if keyboard is not None:
+        assert [button.text for row in keyboard.inline_keyboard for button in row] == ['Vote']
+    else:
+        assert status == PollStatus.CLOSED
+
+
+@pytest.mark.parametrize('minimum,maximum', [(0, 5), (0, 2), (1, 3)])
+def test_quick_buttons_preserve_score_range_and_full_unicode_legend(minimum, maximum):
+    poll = replace(make_poll(voting_mode=VotingMode.QUICK), score_min=minimum, score_max=maximum)
+    options = [PollOption(uuid4(), poll.id, '🍕' * MAX_OPTION_LENGTH, i) for i in range(5)]
+    text, keyboard = render_group_poll(poll, options, [])
+    assert keyboard is not None
+    assert len(keyboard.inline_keyboard) == 6
+    for option, row in zip(options, keyboard.inline_keyboard[:-1], strict=True):
+        assert f'{option.display_order + 1}. {option.label}' in text
+        assert [button.text for button in row] == [
+            f'#{option.display_order + 1}: {minimum}',
+            *map(str, range(minimum + 1, maximum + 1)),
+        ]
+        assert [button.callback_data for button in row] == [
+            quick_score_callback_data(poll.id, option.display_order, value)
+            for value in range(minimum, maximum + 1)
+        ]
+
+
+@pytest.mark.parametrize('scored_count', range(6))
+def test_quick_review_is_numbered_ordered_and_within_alert_budget(scored_count):
+    poll = make_poll(voting_mode=VotingMode.QUICK)
+    options = [PollOption(uuid4(), poll.id, '🍕' * MAX_OPTION_LENGTH, i) for i in range(5)]
+    scores = [make_score(poll.id, 'a', option.id, 0) for option in options[:scored_count]]
+    # Unknown option IDs and repeated saved rows must not inflate completion.
+    scores += [make_score(poll.id, 'a', uuid4(), 5)]
+    scores += scores[:1] if scored_count else []
+    text = render_quick_ballot_review(options[::-1], scores)
+    assert text.splitlines()[:6] == ['Your ballot (# matches Options):'] + [
+        f'#{i + 1}: ' + ('0' if i < scored_count else 'not scored') for i in range(5)
+    ]
+    assert '🍕' not in text
+    assert len(text) <= 200
+    assert len(text.encode('utf-16-le')) // 2 <= 200
+    if scored_count == 5:
+        assert text.endswith('Ballot complete. Your vote counts.')
+    else:
+        assert text.endswith(f'{scored_count}/5 scored. Score every option to count.')
+
+
+@pytest.mark.parametrize('visibility', list(ResultsVisibility))
+@pytest.mark.parametrize('tied', [False, True])
+def test_maximum_quick_unicode_message_fits_budget(visibility, tied):
+    poll = replace(make_poll(voting_mode=VotingMode.QUICK, results_visibility=visibility),
+                   title='🍣' * MAX_TITLE_LENGTH)
+    options = [PollOption(uuid4(), poll.id, '🍕' * MAX_OPTION_LENGTH, i) for i in range(5)]
+    scores = [make_score(poll.id, 'a', option.id, 5 if tied else i)
+              for i, option in enumerate(options)]
+    text, _ = render_group_poll(poll, options, scores)
+    assert QUICK_VOTING_INSTRUCTIONS in text
+    assert len(text.encode('utf-16-le')) // 2 <= 4096
